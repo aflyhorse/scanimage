@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file
+from flask_bootstrap import Bootstrap5
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageEnhance
 import base64
@@ -12,6 +13,8 @@ app.config["SECRET_KEY"] = "your-secret-key-here"
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["PROCESSED_FOLDER"] = "processed"
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
+app.config["BOOTSTRAP_SERVE_LOCAL"] = True
+bootstrap = Bootstrap5(app)
 
 # Ensure upload and processed directories exist
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)

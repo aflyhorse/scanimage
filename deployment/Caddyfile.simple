@@ -5,11 +5,11 @@ your-domain.com {
     reverse_proxy 127.0.0.1:5000
     request_body max_size 20MB
     
-    # 静态文件缓存1年
-    @static path /static/*
+    # 静态文件缓存3天（包括 /static 和 /bootstrap/static）
+    @static path_regexp static ^/(static|bootstrap/static)/.*$
     handle @static {
         reverse_proxy 127.0.0.1:5000
-        header Cache-Control "public, max-age=31536000"
+        header Cache-Control "public, max-age=259200"
     }
     
     # 下载文件不缓存

@@ -1,5 +1,6 @@
 # Web framework
 Flask
+bootstrap-flask
 
 # Image processing
 opencv-python-headless

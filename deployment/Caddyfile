@@ -26,10 +26,10 @@ your-domain.com {
         header_up X-Forwarded-Proto {http.request.scheme}
     }
 
-    # 静态文件缓存
-    handle /static/* {
+    # 静态文件缓存（包括 /static 和 /bootstrap/static）
+    handle_path /{static,bootstrap/static}/* {
         reverse_proxy 127.0.0.1:5000
-        header Cache-Control "public, max-age=31536000, immutable"
+        header Cache-Control "public, max-age=259200, immutable"
     }
 
     # 下载文件处理（禁用缓存）
@@ -84,7 +84,7 @@ your-domain.com {
 #     
 #     handle /static/* {
 #         reverse_proxy 127.0.0.1:5000
-#         header Cache-Control "public, max-age=31536000, immutable"
+#         header Cache-Control "public, max-age=259200, immutable"
 #     }
 #     
 #     handle /download/* {

@@ -1,0 +1,65 @@
+# 子目录部署配置 - Caddyfile
+# 将 scanimage 应用部署在 your-domain.com /scanimage/ 路径下
+
+your-domain.com  {
+    root * /var/www/root
+
+    # 自动重定向不带尾斜杠的请求
+    @scanimage_redirect path /scanimage
+    redir @scanimage_redirect /scanimage/ permanent
+
+    # 处理 scanimage 应用的所有请求
+    handle_path /scanimage/* {
+        request_body max_size 20MB
+        
+        # 反向代理到Flask应用
+        reverse_proxy localhost:7788 {
+            # 重要：传递原始请求路径信息
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Script-Name /scanimage
+        }
+        
+        # 静态文件缓存设置（包括 /static 和 /bootstrap/static）
+        @static path_regexp static ^/scanimage/(static|bootstrap/static)/.*$
+        handle @static {
+            reverse_proxy localhost:7788
+            header Cache-Control "public, max-age=259200"
+        }
+        
+        # 下载文件不缓存
+        @download path_regexp download ^/scanimage/download/.*$
+        handle @download {
+            reverse_proxy localhost:7788
+            header Cache-Control "no-cache, no-store, must-revalidate"
+            header Pragma "no-cache"
+            header Expires "0"
+        }
+    }
+
+    # 其他静态文件服务
+    file_server browse
+    
+    # 日志配置
+    log {
+        output file /var/log/caddy/www.log
+        format json
+        level INFO
+    }
+    
+    # 启用压缩
+    encode gzip zstd
+}
+
+# 全局配置
+{
+    # 替换为你的邮箱地址
+    email your-email@example.com
+    
+    # 日志级别
+    log {
+        level INFO
+    }
+}
