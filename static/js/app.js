@@ -10,6 +10,16 @@ let canvasContainer = null;
 let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
 
+// API路径辅助函数
+function getApiUrl(path) {
+    const base = window.API_BASE || '';
+    // 确保路径以/开头
+    if (!path.startsWith('/')) {
+        path = '/' + path;
+    }
+    return base + path;
+}
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function () {
     initializeElements();
@@ -87,7 +97,7 @@ function setupEventListeners() {
     showLoading(true);
 
     try {
-        const response = await fetch('/upload', {
+        const response = await fetch(getApiUrl('/upload'), {
             method: 'POST',
             body: formData
         });
@@ -341,7 +351,7 @@ async function processImage() {
         showLoading(true);
 
         try {
-            const response = await fetch('/process', {
+            const response = await fetch(getApiUrl('/process'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -387,7 +397,7 @@ async function rotateImage(angle) {
     showLoading(true);
 
     try {
-        const response = await fetch('/rotate', {
+        const response = await fetch(getApiUrl('/rotate'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -419,7 +429,7 @@ function downloadImage() {
     }
 
     const link = document.createElement('a');
-    link.href = '/download/' + processedFilename;
+    link.href = getApiUrl('/download/' + processedFilename);
     link.download = processedFilename;
     document.body.appendChild(link);
     link.click();

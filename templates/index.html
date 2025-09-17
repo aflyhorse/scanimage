@@ -128,6 +128,11 @@
     </div>
 
     {{ bootstrap.load_js() }}
+    <script>
+        // set base API path for subdirectory deployment
+        window.API_BASE = '{{ request.script_root or "" }}';
+        console.log('API Base Path:', window.API_BASE);
+    </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 

@@ -7,12 +7,21 @@ from flask_bootstrap import Bootstrap5
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageEnhance
 import base64
+from dotenv import load_dotenv
 
+load_dotenv()
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "your-secret-key-here"
-app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["PROCESSED_FOLDER"] = "processed"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
+
+# support subdirectory deployment
+SCRIPT_NAME = os.environ.get("SCRIPT_NAME", "")
+if SCRIPT_NAME:
+    app.config["APPLICATION_ROOT"] = SCRIPT_NAME
+
+
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "your-secret-key-here")
+app.config["UPLOAD_FOLDER"] = os.environ.get("UPLOAD_FOLDER", "uploads")
+app.config["PROCESSED_FOLDER"] = os.environ.get("PROCESSED_FOLDER", "processed")
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", "16777216"))
 app.config["BOOTSTRAP_SERVE_LOCAL"] = True
 bootstrap = Bootstrap5(app)
 
@@ -355,4 +364,13 @@ def process_grayscale(image):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # 从环境变量获取配置
+    host = os.environ.get("FLASK_HOST", "0.0.0.0")
+    port = int(os.environ.get("FLASK_PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+
+    print(f"Starting Flask app on {host}:{port}")
+    if SCRIPT_NAME:
+        print(f"Application will be served under: {SCRIPT_NAME}")
+
+    app.run(host=host, port=port, debug=debug)
