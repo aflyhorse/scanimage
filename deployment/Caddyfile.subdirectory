@@ -9,7 +9,7 @@ your-domain.com  {
     redir @scanimage_redirect /scanimage/ permanent
 
     # 处理 scanimage 应用的所有请求
-    handle_path /scanimage/* {
+    handle /scanimage/* {
         request_body max_size 20MB
         
         # 反向代理到Flask应用
