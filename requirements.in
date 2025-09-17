@@ -2,7 +2,7 @@
 Flask
 
 # Image processing
-opencv-python
+opencv-python-headless
 Pillow
 numpy
 
