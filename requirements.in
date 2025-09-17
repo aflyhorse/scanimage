@@ -1,0 +1,11 @@
+# Web framework
+Flask
+
+# Image processing
+opencv-python
+Pillow
+numpy
+
+# File handling and utilities
+python-dotenv
+gunicorn

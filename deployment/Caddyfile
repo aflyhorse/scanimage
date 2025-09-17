@@ -1,0 +1,113 @@
+# ScanImage Web应用 Caddyfile配置
+# 替换 your-domain.com 为你的实际域名
+
+your-domain.com {
+    # 自动HTTPS（Let's Encrypt）
+    # 如果使用localhost或内网，请注释掉上面这行并使用下面的配置：
+    # localhost:80 {
+
+    # 请求体大小限制（用于图片上传）
+    request_body {
+        max_size 20MB
+    }
+
+    # 反向代理到Flask应用
+    reverse_proxy 127.0.0.1:5000 {
+        # 增加超时时间，适应图像处理
+        transport http {
+            dial_timeout 60s
+            response_header_timeout 60s
+        }
+        
+        # 传递真实客户端信息
+        header_up Host {http.request.host}
+        header_up X-Real-IP {http.request.remote}
+        header_up X-Forwarded-For {http.request.remote}
+        header_up X-Forwarded-Proto {http.request.scheme}
+    }
+
+    # 静态文件缓存
+    handle /static/* {
+        reverse_proxy 127.0.0.1:5000
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # 下载文件处理（禁用缓存）
+    handle /download/* {
+        reverse_proxy 127.0.0.1:5000
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        header Pragma "no-cache"
+        header Expires "0"
+    }
+
+    # 日志记录
+    log {
+        output file /var/log/caddy/scanimage-access.log
+        format json
+    }
+
+    # 错误页面
+    handle_errors {
+        @502 expression {http.error.status_code} == 502
+        handle @502 {
+            respond "ScanImage服务暂时不可用，请稍后重试" 502
+        }
+        
+        @413 expression {http.error.status_code} == 413
+        handle @413 {
+            respond "上传文件过大，请选择小于20MB的图片" 413
+        }
+    }
+
+    # 安全头部
+    header {
+        # 防止XSS攻击
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        
+        # 隐藏服务器信息
+        -Server
+        
+        # 内容安全策略（可根据需要调整）
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' cdn.jsdelivr.net"
+    }
+}
+
+# 开发环境配置（注释掉上面的域名配置，启用这个）
+# localhost:8080 {
+#     reverse_proxy 127.0.0.1:5000
+#     
+#     request_body {
+#         max_size 20MB
+#     }
+#     
+#     handle /static/* {
+#         reverse_proxy 127.0.0.1:5000
+#         header Cache-Control "public, max-age=31536000, immutable"
+#     }
+#     
+#     handle /download/* {
+#         reverse_proxy 127.0.0.1:5000
+#         header Cache-Control "no-cache, no-store, must-revalidate"
+#         header Pragma "no-cache"
+#         header Expires "0"
+#     }
+# }
+
+# 全局配置
+{
+    # 邮箱地址用于Let's Encrypt证书申请
+    email your-email@example.com
+    
+    # 自动HTTPS配置
+    auto_https on
+    
+    # 管理端点（可选，用于监控）
+    admin localhost:2019
+    
+    # 日志级别
+    log {
+        level INFO
+    }
+}
