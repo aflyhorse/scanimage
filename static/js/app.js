@@ -17,7 +17,9 @@ function getApiUrl(path) {
     if (!path.startsWith('/')) {
         path = '/' + path;
     }
-    return base + path;
+    const fullUrl = base + path;
+    console.log(`API URL: ${path} -> ${fullUrl}`);
+    return fullUrl;
 }
 
 // 初始化
@@ -51,8 +53,16 @@ function initializeElements() {
 }
 
 function setupEventListeners() {
+    console.log('Setting up event listeners...');
+
     // 文件上传表单
-    document.getElementById('upload-form').addEventListener('submit', handleFileUpload);
+    const uploadForm = document.getElementById('upload-form');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', handleFileUpload);
+        console.log('Upload form event listener added');
+    } else {
+        console.error('Upload form not found!');
+    }
 
     // Canvas事件
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
@@ -80,11 +90,17 @@ function setupEventListeners() {
 
     // 重新开始按钮
     document.getElementById('start-over').addEventListener('click', startOver);
-} async function handleFileUpload(event) {
+}
+
+async function handleFileUpload(event) {
+    console.log('handleFileUpload called', event);
     event.preventDefault();
 
     const fileInput = document.getElementById('image-input');
     const file = fileInput.files[0];
+
+    console.log('Selected file:', file);
+    console.log('API_BASE:', window.API_BASE);
 
     if (!file) {
         showError('请选择一个图片文件');
