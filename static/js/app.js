@@ -9,6 +9,7 @@ let dragIndex = -1;
 let canvasContainer = null;
 let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
+let debugMode = false; // 调试模式
 
 // API路径辅助函数
 function getApiUrl(path) {
@@ -20,6 +21,76 @@ function getApiUrl(path) {
     const fullUrl = base + path;
     console.log(`API URL: ${path} -> ${fullUrl}`);
     return fullUrl;
+}
+
+// 坐标转换辅助函数
+function getCanvasCoordinates(event) {
+    // 获取canvas的显示尺寸和位置
+    const rect = canvas.getBoundingClientRect();
+
+    // 计算缩放比例
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // 获取事件的客户端坐标（支持鼠标和触摸事件）
+    let clientX, clientY;
+    if (event.touches && event.touches.length > 0) {
+        // 触摸事件，使用第一个触点
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+    } else {
+        // 鼠标事件
+        clientX = event.clientX;
+        clientY = event.clientY;
+    }
+
+    // 转换为canvas内部坐标
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+
+    // 确保坐标在canvas范围内
+    const clampedX = Math.max(0, Math.min(canvas.width, x));
+    const clampedY = Math.max(0, Math.min(canvas.height, y));
+
+    // 调试信息
+    if (debugMode) {
+        console.log('坐标转换调试:', {
+            canvasSize: { width: canvas.width, height: canvas.height },
+            displaySize: { width: rect.width, height: rect.height },
+            scale: { x: scaleX, y: scaleY },
+            clientCoords: { x: clientX, y: clientY },
+            rectOffset: { left: rect.left, top: rect.top },
+            relativeCoords: { x: clientX - rect.left, y: clientY - rect.top },
+            canvasCoords: { x: x, y: y },
+            clampedCoords: { x: clampedX, y: clampedY }
+        });
+    }
+
+    return [Math.round(clampedX), Math.round(clampedY)];
+}
+
+function getDisplayCoordinates(canvasX, canvasY) {
+    // 获取canvas的显示尺寸
+    const rect = canvas.getBoundingClientRect();
+
+    // 计算缩放比例
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+
+    // 转换为显示坐标
+    const displayX = canvasX * scaleX;
+    const displayY = canvasY * scaleY;
+
+    // 调试信息
+    if (debugMode) {
+        console.log('显示坐标转换调试:', {
+            canvasCoords: { x: canvasX, y: canvasY },
+            scale: { x: scaleX, y: scaleY },
+            displayCoords: { x: displayX, y: displayY }
+        });
+    }
+
+    return [Math.round(displayX), Math.round(displayY)];
 }
 
 // 初始化
@@ -50,6 +121,52 @@ function initializeElements() {
     canvasContainer.className = 'canvas-container d-inline-block position-relative';
     canvas.parentNode.insertBefore(canvasContainer, canvas);
     canvasContainer.appendChild(canvas);
+
+    // 添加调试信息显示
+    if (debugMode) {
+        createDebugInfoDisplay();
+    }
+}
+
+function createDebugInfoDisplay() {
+    // 创建调试信息显示区域
+    const debugInfo = document.createElement('div');
+    debugInfo.id = 'debug-info';
+    debugInfo.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+        z-index: 1000;
+        max-width: 300px;
+    `;
+    debugInfo.innerHTML = '<strong>坐标调试信息</strong><br>移动鼠标到画布上查看坐标';
+    document.body.appendChild(debugInfo);
+
+    // 添加鼠标移动监听，显示实时坐标
+    canvas.addEventListener('mousemove', (event) => {
+        if (!isDragging) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const [canvasX, canvasY] = getCanvasCoordinates(event);
+
+            debugInfo.innerHTML = `
+                <strong>坐标调试信息</strong><br>
+                Canvas尺寸: ${canvas.width} x ${canvas.height}<br>
+                显示尺寸: ${Math.round(rect.width)} x ${Math.round(rect.height)}<br>
+                缩放比例: ${scaleX.toFixed(3)} x ${scaleY.toFixed(3)}<br>
+                鼠标位置: ${event.clientX - rect.left}, ${event.clientY - rect.top}<br>
+                Canvas坐标: ${canvasX}, ${canvasY}<br>
+                已选点数: ${corners.length}
+            `;
+        }
+    });
 }
 
 function setupEventListeners() {
@@ -67,9 +184,16 @@ function setupEventListeners() {
     // Canvas事件
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
 
+    // 触摸事件（手机端支持）
+    canvas.addEventListener('touchstart', handleCanvasTouchStart);
+
     // 全局鼠标事件（处理拖拽）
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+
+    // 全局触摸事件（处理拖拽）
+    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchend', handleTouchEnd);
 
     // Canvas特有事件
     canvas.addEventListener('mouseleave', handleMouseLeave);
@@ -193,12 +317,24 @@ function updateCornerPoints() {
     corners.forEach((corner, index) => {
         const point = document.createElement('div');
         point.className = 'corner-point';
-        point.style.left = corner[0] + 'px';
-        point.style.top = corner[1] + 'px';
+
+        // 将canvas内部坐标转换为显示坐标
+        const [displayX, displayY] = getDisplayCoordinates(corner[0], corner[1]);
+        point.style.left = displayX + 'px';
+        point.style.top = displayY + 'px';
         point.dataset.index = index;
 
-        // 添加点击事件来启动拖拽
+        // 添加鼠标点击事件来启动拖拽
         point.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isDragging = true;
+            dragIndex = index;
+            point.classList.add('dragging');
+        });
+
+        // 添加触摸事件来启动拖拽
+        point.addEventListener('touchstart', (e) => {
             e.preventDefault();
             e.stopPropagation();
             isDragging = true;
@@ -212,9 +348,7 @@ function updateCornerPoints() {
 
 function handleCanvasMouseDown(event) {
     event.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const [x, y] = getCanvasCoordinates(event);
 
     // 检查是否点击在已有corner point附近（作为备用方案）
     for (let i = 0; i < corners.length; i++) {
@@ -242,20 +376,18 @@ function handleCanvasMouseDown(event) {
 
 function handleMouseMove(event) {
     if (isDragging && dragIndex >= 0) {
-        const rect = canvas.getBoundingClientRect();
-        let x = event.clientX - rect.left;
-        let y = event.clientY - rect.top;
+        const [x, y] = getCanvasCoordinates(event);
 
         // 网格吸附
         const gridSize = 5;
-        x = Math.round(x / gridSize) * gridSize;
-        y = Math.round(y / gridSize) * gridSize;
+        const snappedX = Math.round(x / gridSize) * gridSize;
+        const snappedY = Math.round(y / gridSize) * gridSize;
 
         // 确保坐标在canvas范围内
-        x = Math.max(0, Math.min(canvas.width, x));
-        y = Math.max(0, Math.min(canvas.height, y));
+        const clampedX = Math.max(0, Math.min(canvas.width, snappedX));
+        const clampedY = Math.max(0, Math.min(canvas.height, snappedY));
 
-        corners[dragIndex] = [x, y];
+        corners[dragIndex] = [clampedX, clampedY];
         updateCornerPoints();
         drawSelection();
     }
@@ -285,6 +417,49 @@ function handleMouseLeave() {
     }
 }
 
+// 触摸事件处理函数
+function handleCanvasTouchStart(event) {
+    event.preventDefault(); // 防止页面滚动
+
+    // 将触摸事件转换为鼠标事件的格式
+    const touch = event.touches[0];
+    const mouseEvent = {
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        preventDefault: () => { },
+        touches: event.touches
+    };
+
+    handleCanvasMouseDown(mouseEvent);
+}
+
+function handleTouchMove(event) {
+    if (isDragging && dragIndex >= 0) {
+        event.preventDefault(); // 防止页面滚动
+
+        const touch = event.touches[0];
+        const mouseEvent = {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            touches: event.touches
+        };
+
+        handleMouseMove(mouseEvent);
+    }
+}
+
+function handleTouchEnd(event) {
+    if (isDragging) {
+        event.preventDefault();
+
+        const mouseEvent = {
+            preventDefault: () => { }
+        };
+
+        handleMouseUp(mouseEvent);
+    }
+}
+
 function drawSelection() {
     // 重绘原始图片
     if (originalImageData) {
@@ -309,6 +484,22 @@ function drawSelection() {
             ctx.fill();
         }
         ctx.stroke();
+
+        // 调试模式：在canvas上绘制小圆圈标记每个角点的精确位置
+        if (debugMode) {
+            ctx.fillStyle = '#ff0000';
+            corners.forEach((corner, index) => {
+                ctx.beginPath();
+                ctx.arc(corner[0], corner[1], 3, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // 添加角点编号
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '12px Arial';
+                ctx.fillText(index + 1, corner[0] + 5, corner[1] - 5);
+                ctx.fillStyle = '#ff0000';
+            });
+        }
 
         // 绘制辅助线（从最后一个点到鼠标位置，如果正在添加新点）
         if (corners.length < 4 && corners.length > 0) {

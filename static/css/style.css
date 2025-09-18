@@ -195,3 +195,43 @@ body {
     transform: scale(1.1);
     text-decoration: none;
 }
+
+/* 手机端优化 */
+@media (max-width: 768px) {
+    .corner-point:hover {
+        transform: translate(-50%, -50%) scale(1.2);
+        /* 减少移动端的hover缩放 */
+    }
+
+    .corner-point.dragging {
+        transform: translate(-50%, -50%) scale(1.3);
+        /* 减少移动端的拖拽缩放 */
+    }
+
+    /* 防止手机端选择文本 */
+    .canvas-container {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+
+    /* 优化canvas在手机端的显示 */
+    #image-canvas {
+        touch-action: none;
+        /* 防止浏览器处理触摸手势 */
+    }
+}
+
+/* 响应式设计改进 */
+@media (max-width: 576px) {
+    .container-fluid {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .card {
+        margin-bottom: 1rem;
+    }
+}
