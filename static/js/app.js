@@ -11,6 +11,10 @@ let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
 let debugMode = false; // 调试模式
 
+// 拖拽性能优化变量
+let animationFrameId = null;
+let smoothDragMode = true; // 流畅拖拽模式
+
 // API路径辅助函数
 function getApiUrl(path) {
     const base = window.API_BASE || '';
@@ -183,6 +187,7 @@ function setupEventListeners() {
 
     // Canvas事件
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
+    canvas.addEventListener('pointerdown', handleCanvasPointerDown); // 添加pointer支持
 
     // 触摸事件（手机端支持）
     canvas.addEventListener('touchstart', handleCanvasTouchStart);
@@ -190,6 +195,10 @@ function setupEventListeners() {
     // 全局鼠标事件（处理拖拽）
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+
+    // 全局pointer事件（更好的拖拽支持）
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
 
     // 全局触摸事件（处理拖拽）
     document.addEventListener('touchmove', handleTouchMove);
@@ -331,6 +340,34 @@ function updateCornerPoints() {
             isDragging = true;
             dragIndex = index;
             point.classList.add('dragging');
+
+            if (debugMode) {
+                console.log(`Corner point ${index} mousedown 事件触发`);
+            }
+        });
+
+        // 添加pointer events支持（更好的拖拽体验）
+        point.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isDragging = true;
+            dragIndex = index;
+            point.classList.add('dragging');
+
+            // 设置pointer capture，确保后续事件不会丢失
+            if (point.setPointerCapture) {
+                try {
+                    point.setPointerCapture(e.pointerId);
+                } catch (err) {
+                    if (debugMode) {
+                        console.log('设置pointer capture失败:', err.message);
+                    }
+                }
+            }
+
+            if (debugMode) {
+                console.log(`Corner point ${index} pointerdown 事件触发, pointerId: ${e.pointerId}`);
+            }
         });
 
         // 添加触摸事件来启动拖拽
@@ -340,6 +377,10 @@ function updateCornerPoints() {
             isDragging = true;
             dragIndex = index;
             point.classList.add('dragging');
+
+            if (debugMode) {
+                console.log(`Corner point ${index} touchstart 事件触发`);
+            }
         });
 
         canvasContainer.appendChild(point);
@@ -350,19 +391,44 @@ function handleCanvasMouseDown(event) {
     event.preventDefault();
     const [x, y] = getCanvasCoordinates(event);
 
-    // 检查是否点击在已有corner point附近（作为备用方案）
+    // 检查是否点击在已有corner point附近（扩大检测范围以提高可用性）
+    let closestIndex = -1;
+    let closestDistance = Infinity;
+
     for (let i = 0; i < corners.length; i++) {
         const dx = x - corners[i][0];
         const dy = y - corners[i][1];
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (distance <= 12) {
-            isDragging = true;
-            dragIndex = i;
-            const point = canvasContainer.querySelector(`[data-index="${i}"]`);
-            if (point) point.classList.add('dragging');
-            return;
+        if (distance <= 20 && distance < closestDistance) { // 扩大检测范围到20像素
+            closestDistance = distance;
+            closestIndex = i;
         }
+    }
+
+    if (closestIndex >= 0) {
+        // 开始拖拽最近的corner point
+        isDragging = true;
+        dragIndex = closestIndex;
+        const point = canvasContainer.querySelector(`[data-index="${closestIndex}"]`);
+        if (point) {
+            point.classList.add('dragging');
+            // 设置pointer capture（如果支持且是pointer事件）
+            if (point.setPointerCapture && event.pointerId) {
+                try {
+                    point.setPointerCapture(event.pointerId);
+                } catch (e) {
+                    if (debugMode) {
+                        console.log('设置pointer capture失败:', e.message);
+                    }
+                }
+            }
+        }
+
+        if (debugMode) {
+            console.log(`开始拖拽角点 ${closestIndex}, 距离: ${closestDistance.toFixed(1)}`);
+        }
+        return;
     }
 
     // 如果没有点击到现有点位，且角点数量少于4个，添加新点位
@@ -371,25 +437,57 @@ function handleCanvasMouseDown(event) {
         updateCornerPoints();
         drawSelection();
         updateProcessButton();
+
+        if (debugMode) {
+            console.log(`添加新角点: (${x}, ${y}), 总数: ${corners.length}`);
+        }
     }
 }
 
 function handleMouseMove(event) {
     if (isDragging && dragIndex >= 0) {
+        // 确保拖拽的corner point仍然存在
+        if (dragIndex >= corners.length) {
+            console.warn('拖拽索引超出范围，停止拖拽');
+            isDragging = false;
+            dragIndex = -1;
+            return;
+        }
+
         const [x, y] = getCanvasCoordinates(event);
 
-        // 网格吸附
-        const gridSize = 5;
-        const snappedX = Math.round(x / gridSize) * gridSize;
-        const snappedY = Math.round(y / gridSize) * gridSize;
+        // 实时更新corner point的DOM位置（不使用网格吸附，确保流畅）
+        const point = canvasContainer.querySelector(`[data-index="${dragIndex}"]`);
+        if (point) {
+            const [displayX, displayY] = getDisplayCoordinates(x, y);
+            point.style.left = displayX + 'px';
+            point.style.top = displayY + 'px';
+        } else {
+            console.warn('找不到对应的corner point DOM元素');
+        }
 
-        // 确保坐标在canvas范围内
-        const clampedX = Math.max(0, Math.min(canvas.width, snappedX));
-        const clampedY = Math.max(0, Math.min(canvas.height, snappedY));
+        // 使用requestAnimationFrame来节流canvas重绘
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+        }
 
-        corners[dragIndex] = [clampedX, clampedY];
-        updateCornerPoints();
-        drawSelection();
+        animationFrameId = requestAnimationFrame(() => {
+            // 确保坐标在canvas范围内
+            const clampedX = Math.max(0, Math.min(canvas.width, x));
+            const clampedY = Math.max(0, Math.min(canvas.height, y));
+
+            // 更新corners数组
+            if (dragIndex >= 0 && dragIndex < corners.length) {
+                corners[dragIndex] = [clampedX, clampedY];
+
+                // 重绘选择区域
+                drawSelection();
+            }
+        });
+
+        if (debugMode) {
+            console.log(`拖拽移动: 角点${dragIndex} -> (${x.toFixed(1)}, ${y.toFixed(1)})`);
+        }
     }
 }
 
@@ -400,8 +498,43 @@ function handleMouseUp(event) {
         if (draggingPoint) {
             draggingPoint.classList.remove('dragging');
         }
+
+        // 在拖拽结束时应用网格吸附（根据模式设置）
+        if (dragIndex >= 0 && dragIndex < corners.length) {
+            const corner = corners[dragIndex];
+            let finalX = corner[0];
+            let finalY = corner[1];
+
+            // 只在非流畅模式下应用网格吸附
+            if (!smoothDragMode) {
+                const gridSize = 5;
+                finalX = Math.round(corner[0] / gridSize) * gridSize;
+                finalY = Math.round(corner[1] / gridSize) * gridSize;
+            }
+
+            // 确保坐标在canvas范围内
+            const clampedX = Math.max(0, Math.min(canvas.width, finalX));
+            const clampedY = Math.max(0, Math.min(canvas.height, finalY));
+
+            corners[dragIndex] = [clampedX, clampedY];
+
+            // 更新最终位置
+            updateCornerPoints();
+            drawSelection();
+
+            if (debugMode) {
+                console.log(`拖拽结束: 角点${dragIndex} 最终位置 (${clampedX}, ${clampedY})`);
+            }
+        }
+
         dragIndex = -1;
         updateProcessButton();
+
+        // 清理动画帧
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
     }
 }
 
@@ -457,6 +590,55 @@ function handleTouchEnd(event) {
         };
 
         handleMouseUp(mouseEvent);
+    }
+}
+
+// Pointer事件处理函数（统一处理鼠标和触摸，更好的拖拽体验）
+function handleCanvasPointerDown(event) {
+    // 将pointer事件转换为通用格式
+    const unifiedEvent = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        preventDefault: () => event.preventDefault(),
+        pointerId: event.pointerId
+    };
+
+    handleCanvasMouseDown(unifiedEvent);
+}
+
+function handlePointerMove(event) {
+    if (isDragging && dragIndex >= 0) {
+        // 将pointer事件转换为通用事件格式
+        const unifiedEvent = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            preventDefault: () => event.preventDefault()
+        };
+
+        handleMouseMove(unifiedEvent);
+    }
+}
+
+function handlePointerUp(event) {
+    if (isDragging) {
+        // 释放pointer capture
+        const draggingPoint = canvasContainer.querySelector('.dragging');
+        if (draggingPoint && draggingPoint.releasePointerCapture && event.pointerId) {
+            try {
+                draggingPoint.releasePointerCapture(event.pointerId);
+            } catch (e) {
+                // 忽略释放捕获时的错误
+                if (debugMode) {
+                    console.log('释放pointer capture时发生错误:', e.message);
+                }
+            }
+        }
+
+        const unifiedEvent = {
+            preventDefault: () => event.preventDefault()
+        };
+
+        handleMouseUp(unifiedEvent);
     }
 }
 

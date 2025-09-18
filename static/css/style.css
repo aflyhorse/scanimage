@@ -45,7 +45,10 @@ body {
     transform: translate(-50%, -50%);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     z-index: 10;
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    /* 移除transform的transition以提升拖拽性能 */
+    will-change: transform;
+    /* 提示浏览器这个元素会发生变换，优化渲染 */
 }
 
 .corner-point:hover {
@@ -59,6 +62,8 @@ body {
     background-color: #28a745;
     transform: translate(-50%, -50%) scale(1.4);
     box-shadow: 0 4px 16px rgba(40, 167, 69, 0.4);
+    transition: none;
+    /* 拖拽时完全禁用transition */
 }
 
 .selection-area {
