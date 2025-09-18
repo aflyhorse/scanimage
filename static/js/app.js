@@ -11,6 +11,11 @@ let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
 let debugMode = false; // 调试模式
 
+// 检测微信环境
+function isWechat() {
+    return /MicroMessenger/i.test(navigator.userAgent);
+}
+
 // 拖拽性能优化变量
 let animationFrameId = null;
 let smoothDragMode = true; // 流畅拖拽模式
@@ -776,6 +781,14 @@ async function processImage() {
 function displayProcessedImage(imageData) {
     const resultImg = document.getElementById('result-image');
     resultImg.src = 'data:image/png;base64,' + imageData;
+
+    // 在微信环境下更新下载按钮
+    if (isWechat()) {
+        const downloadBtn = document.getElementById('download-btn');
+        downloadBtn.innerHTML = '微信客户端请长按图片保存';
+        downloadBtn.className = 'btn btn-info';
+        downloadBtn.style.cursor = 'default';
+    }
 }
 
 async function rotateImage(angle) {
