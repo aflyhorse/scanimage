@@ -100,6 +100,45 @@
                         <h5 class="mb-0">步骤 3: 处理结果</h5>
                     </div>
                     <div class="card-body">
+                        <!-- 处理选项切换 -->
+                        <div class="mb-3" id="processing-options">
+                            <h6 class="mb-2">处理选项：</h6>
+                            
+                            <!-- 彩色图片选项 -->
+                            <div id="color-processing-options" class="d-none">
+                                <div class="btn-group" role="group" aria-label="彩色处理选项">
+                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-original" value="original" checked>
+                                    <label class="btn btn-outline-primary" for="color-original">原色彩</label>
+                                    
+                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-adjusted" value="default">
+                                    <label class="btn btn-outline-secondary" for="color-adjusted">自动调色</label>
+                                </div>
+                                <div class="form-text">原色彩：仅做透视矫正和适当亮度调整；自动调色：进行色彩和白平衡调整</div>
+                            </div>
+                            
+                            <!-- 黑白图片选项 -->
+                            <div id="grayscale-processing-options" class="d-none">
+                                <div class="mb-2">
+                                    <div class="btn-group" role="group" aria-label="黑白处理选项">
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-standard" value="standard" checked>
+                                        <label class="btn btn-outline-primary" for="grayscale-standard">标准</label>
+                                        
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-more" value="more">
+                                        <label class="btn btn-outline-info" for="grayscale-more">较多细节</label>
+                                        
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-most" value="most">
+                                        <label class="btn btn-outline-success" for="grayscale-most">更多细节</label>
+                                        
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-extreme" value="extreme">
+                                        <label class="btn btn-outline-warning" for="grayscale-extreme">暴力细节</label>
+                                    </div>
+                                </div>
+                                <div class="form-text">
+                                    <span id="grayscale-description">标准：未经均衡化的处理，保持原始层次</span>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="text-center mb-3">
                             <img id="result-image" class="img-fluid"
                                 style="max-height: 600px; border: 2px solid #dee2e6;">

@@ -9,6 +9,8 @@ let dragIndex = -1;
 let canvasContainer = null;
 let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
+let currentColorMode = 'color'; // 当前处理的图像模式
+let currentProcessingOption = 'default'; // 当前处理选项
 let debugMode = false; // 调试模式
 
 // 检测微信环境
@@ -107,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeElements();
     setupEventListeners();
     loadLastColorMode(); // 加载上次的模式选择
+    updateGrayscaleDescription(); // 初始化灰度处理选项描述
 });
 
 function loadLastColorMode() {
@@ -225,6 +228,27 @@ function setupEventListeners() {
 
     // 下载按钮
     document.getElementById('download-btn').addEventListener('click', downloadImage);
+
+    // 处理选项变化监听 - 彩色选项自动触发重新处理
+    document.querySelectorAll('input[name="colorProcessing"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            // 自动触发重新处理
+            setTimeout(() => {
+                reprocessImage();
+            }, 100);
+        });
+    });
+
+    // 黑白处理选项变化监听 - 自动触发重新处理
+    document.querySelectorAll('input[name="grayscaleProcessing"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            updateGrayscaleDescription();
+            // 自动触发重新处理
+            setTimeout(() => {
+                reprocessImage();
+            }, 100);
+        });
+    });
 
     // 重新开始按钮
     document.getElementById('start-over').addEventListener('click', startOver);
@@ -729,6 +753,7 @@ async function processImage() {
     const colorMode = document.querySelector('input[name="colorMode"]:checked').value;
     // 保存当前选择的模式
     lastColorMode = colorMode;
+    currentColorMode = colorMode;
     localStorage.setItem('scanimage-color-mode', colorMode);
 
     // 直接使用canvas的尺寸和原始图片的尺寸计算缩放比例
@@ -754,7 +779,8 @@ async function processImage() {
                 body: JSON.stringify({
                     filename: uploadedFilename,
                     corners: actualCorners,
-                    color_mode: colorMode
+                    color_mode: colorMode,
+                    processing_option: 'default'
                 })
             });
 
@@ -762,7 +788,9 @@ async function processImage() {
 
             if (result.success) {
                 processedFilename = result.processed_filename;
+                currentProcessingOption = 'default';
                 displayProcessedImage(result.image_data);
+                setupProcessingOptions(colorMode);
                 showSection('result-section');
             } else {
                 showError(result.error || '处理失败');
@@ -775,6 +803,109 @@ async function processImage() {
     };
 
     // 重新加载原始图片以获取正确的尺寸
+    img.src = 'data:image/png;base64,' + window.originalImageBase64;
+}
+
+function setupProcessingOptions(colorMode) {
+    // 显示对应的处理选项
+    const colorOptions = document.getElementById('color-processing-options');
+    const grayscaleOptions = document.getElementById('grayscale-processing-options');
+
+    if (colorMode === 'color') {
+        colorOptions.classList.remove('d-none');
+        grayscaleOptions.classList.add('d-none');
+        // 重置选项为原色彩默认值
+        document.getElementById('color-original').checked = true;
+        currentProcessingOption = 'original';
+    } else {
+        colorOptions.classList.add('d-none');
+        grayscaleOptions.classList.remove('d-none');
+        // 重置为标准灰度处理选项
+        const standardOption = document.querySelector('input[name="grayscaleProcessing"][value="standard"]');
+        if (standardOption) {
+            standardOption.checked = true;
+        }
+        currentProcessingOption = 'standard';
+    }
+}
+
+// 更新灰度处理选项描述
+function updateGrayscaleDescription() {
+    const selectedOption = document.querySelector('input[name="grayscaleProcessing"]:checked');
+    const description = document.getElementById('grayscale-description');
+
+    if (selectedOption && description) {
+        const descriptions = {
+            'standard': '标准灰度处理，平衡的细节保留和对比度',
+            'more': '保留更多细节，增强纹理和层次感',
+            'most': '最大程度保留细节，适合复杂文档',
+            'extreme': '极致细节增强，适合淡色或低对比度文档'
+        };
+
+        description.textContent = descriptions[selectedOption.value] || '标准灰度处理';
+    }
+}
+
+async function reprocessImage() {
+    if (!uploadedFilename || corners.length !== 4) {
+        showError('无法重新处理，请重新开始流程');
+        return;
+    }
+
+    // 获取当前选择的处理选项
+    let processingOption = 'default';
+    if (currentColorMode === 'color') {
+        const selectedOption = document.querySelector('input[name="colorProcessing"]:checked');
+        processingOption = selectedOption ? selectedOption.value : 'default';
+    } else {
+        // 黑白模式使用灰度处理选项
+        const selectedOption = document.querySelector('input[name="grayscaleProcessing"]:checked');
+        processingOption = selectedOption ? selectedOption.value : 'standard';
+    }
+
+    // 重新加载原始图片以计算尺寸
+    const img = new Image();
+    img.onload = async function () {
+        const scaleX = img.naturalWidth / canvas.width;
+        const scaleY = img.naturalHeight / canvas.height;
+
+        const actualCorners = corners.map(corner => [
+            corner[0] * scaleX,
+            corner[1] * scaleY
+        ]);
+
+        showLoading(true);
+
+        try {
+            const response = await fetch(getApiUrl('/reprocess'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: uploadedFilename,
+                    corners: actualCorners,
+                    color_mode: currentColorMode,
+                    processing_option: processingOption,
+                    processed_filename: processedFilename
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                currentProcessingOption = processingOption;
+                displayProcessedImage(result.image_data);
+            } else {
+                showError(result.error || '重新处理失败');
+            }
+        } catch (error) {
+            showError('重新处理失败: ' + error.message);
+        } finally {
+            showLoading(false);
+        }
+    };
+
     img.src = 'data:image/png;base64,' + window.originalImageBase64;
 }
 
@@ -846,6 +977,8 @@ function startOver() {
     corners = [];
     isDragging = false;
     dragIndex = -1;
+    currentColorMode = 'color';
+    currentProcessingOption = 'default';
 
     // 清除原始图片数据
     if (window.originalImageBase64) {
@@ -867,6 +1000,12 @@ function startOver() {
     if (colorModeRadio) {
         colorModeRadio.checked = true;
     }
+
+    // 重置处理选项 - 原色彩为默认
+    document.getElementById('color-original').checked = true;
+
+    // 重置细节级别显示
+    updateDetailLevelDisplay();
 
     // 清空错误信息
     clearErrors();
@@ -907,6 +1046,24 @@ function showError(message) {
             alert.remove();
         }
     }, 5000);
+}
+
+function showInfo(message) {
+    const container = document.getElementById('error-container');
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-info alert-dismissible fade show';
+    alert.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    container.appendChild(alert);
+
+    // 自动关闭信息消息
+    setTimeout(() => {
+        if (alert.parentNode) {
+            alert.remove();
+        }
+    }, 3000);
 }
 
 function clearErrors() {

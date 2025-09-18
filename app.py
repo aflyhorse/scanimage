@@ -98,6 +98,7 @@ def process_image():
     filename = data.get("filename")
     corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
     color_mode = data.get("color_mode", "color")  # 'color' or 'grayscale'
+    processing_option = data.get("processing_option", "default")  # 新增处理选项
 
     if not filename or not corners:
         return jsonify({"error": "缺少必要参数"}), 400
@@ -112,11 +113,15 @@ def process_image():
         # Perspective correction
         corrected_image = perspective_correction(image, corners)
 
-        # Post-processing based on color mode
+        # Post-processing based on color mode and processing option
         if color_mode == "grayscale":
-            processed_image = process_grayscale(corrected_image)
-        else:
-            processed_image = process_color(corrected_image)
+            # 使用统一的黑白图像处理函数
+            processed_image = process_grayscale_image(
+                corrected_image, processing_option
+            )
+        else:  # color mode
+            # 使用统一的彩色图像处理函数
+            processed_image = process_color_image(corrected_image, processing_option)
 
         # Save processed image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -140,6 +145,66 @@ def process_image():
 
     except Exception as e:
         return jsonify({"error": f"图像处理失败: {str(e)}"}), 500
+
+
+@app.route("/reprocess", methods=["POST"])
+def reprocess_image():
+    """重新处理已上传的图像，使用新的处理选项"""
+    data = request.get_json()
+    filename = data.get("filename")
+    corners = data.get("corners")
+    color_mode = data.get("color_mode", "color")
+    processing_option = data.get("processing_option", "default")
+
+    if not filename or not corners:
+        return jsonify({"error": "缺少必要参数"}), 400
+
+    try:
+        # Load original image
+        image_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        image = cv2.imread(image_path)
+        if image is None:
+            return jsonify({"error": "无法读取图像文件"}), 400
+
+        # Perspective correction
+        corrected_image = perspective_correction(image, corners)
+
+        # Post-processing based on color mode and processing option
+        if color_mode == "grayscale":
+            # 使用统一的黑白图像处理函数
+            processed_image = process_grayscale_image(
+                corrected_image, processing_option
+            )
+        else:  # color mode
+            # 使用统一的彩色图像处理函数
+            processed_image = process_color_image(corrected_image, processing_option)
+
+        # Save processed image (overwrite the current processed image)
+        if data.get("processed_filename"):
+            processed_filename = data.get("processed_filename")
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            processed_filename = f"{timestamp}.png"
+
+        processed_path = os.path.join(
+            app.config["PROCESSED_FOLDER"], processed_filename
+        )
+        cv2.imwrite(processed_path, processed_image)
+
+        # Convert to base64 for frontend
+        _, buffer = cv2.imencode(".png", processed_image)
+        img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+        return jsonify(
+            {
+                "success": True,
+                "processed_filename": processed_filename,
+                "image_data": img_base64,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"重新处理失败: {str(e)}"}), 500
 
 
 @app.route("/rotate", methods=["POST"])
@@ -256,45 +321,191 @@ def perspective_correction(image, corners):
     return corrected
 
 
-def process_color(image):
-    """彩色图像后处理：调色和白平衡"""
+def histogram_equalization(image):
+    """直方图均衡化处理，支持彩色和灰度图像"""
+    # 判断是彩色还是灰度图像
+    if len(image.shape) == 3:
+        # 彩色图像：在LAB色彩空间中对L通道进行均衡化
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        l_channel, a_channel, b_channel = cv2.split(lab)
+
+        # 对L通道进行CLAHE（限制对比度自适应直方图均衡化）
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l_equalized = clahe.apply(l_channel)
+
+        # 重新合并通道
+        lab_equalized = cv2.merge([l_equalized, a_channel, b_channel])
+
+        # 转换回BGR色彩空间
+        result = cv2.cvtColor(lab_equalized, cv2.COLOR_LAB2BGR)
+
+        return result
+    else:
+        # 灰度图像：直接进行CLAHE
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        return clahe.apply(image)
+
+
+def apply_white_balance(image, mode="color"):
+    """
+    统一的白平衡处理函数
+
+    Args:
+        image: 输入图像 (BGR格式)
+        mode: 处理模式
+            - "color": 彩色图像白平衡，使用加权目标和极值过滤
+            - "grayscale": 灰度图像白平衡，使用简单目标和保守处理
+
+    Returns:
+        处理后的图像 (BGR格式)
+    """
     # Convert BGR to RGB for PIL processing
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(image_rgb)
 
-    # Auto white balance using PIL
-    # Simple white balance by stretching color channels
+    # 分离RGB通道
     r, g, b = pil_image.split()
+    r_array = np.array(r, dtype=np.float32)
+    g_array = np.array(g, dtype=np.float32)
+    b_array = np.array(b, dtype=np.float32)
 
-    # Calculate the average and adjust
-    r_avg = np.mean(np.array(r))
-    g_avg = np.mean(np.array(g))
-    b_avg = np.mean(np.array(b))
+    if mode == "color":
+        # 彩色模式：使用robust mean和加权目标
+        def get_robust_mean(channel_array):
+            # 排除极值，只考虑中间范围的像素
+            mask = (channel_array > 30) & (channel_array < 225)
+            if np.sum(mask) > 0:
+                return np.mean(channel_array[mask])
+            else:
+                return np.mean(channel_array)
 
-    # Target gray level
-    target = (r_avg + g_avg + b_avg) / 3
+        r_avg = get_robust_mean(r_array)
+        g_avg = get_robust_mean(g_array)
+        b_avg = get_robust_mean(b_array)
 
-    # Adjust each channel
+        # 使用加权平均，给绿色通道更多权重（因为人眼对绿色最敏感）
+        target = r_avg * 0.3 + g_avg * 0.5 + b_avg * 0.2
+
+        # 因子限制范围
+        factor_range = (0.8, 1.5)
+
+    else:  # mode == "grayscale"
+        # 灰度模式：使用简单mean和保守目标
+        r_avg = np.mean(r_array)
+        g_avg = np.mean(g_array)
+        b_avg = np.mean(b_array)
+
+        # 使用较为保守的目标值，保留更多原始色调信息
+        target = (r_avg + g_avg + b_avg) / 3 * 1.05
+
+        # 更保守的因子限制，保留更多细节
+        factor_range = (0.85, 1.5)
+
+    # 计算调整因子
     r_factor = target / r_avg if r_avg > 0 else 1
     g_factor = target / g_avg if g_avg > 0 else 1
     b_factor = target / b_avg if b_avg > 0 else 1
 
-    # Apply factors with limits
-    r_factor = min(max(r_factor, 0.5), 2.0)
-    g_factor = min(max(g_factor, 0.5), 2.0)
-    b_factor = min(max(b_factor, 0.5), 2.0)
+    # 应用因子限制
+    r_factor = min(max(r_factor, factor_range[0]), factor_range[1])
+    g_factor = min(max(g_factor, factor_range[0]), factor_range[1])
+    b_factor = min(max(b_factor, factor_range[0]), factor_range[1])
 
-    # Apply white balance
-    r = Image.eval(r, lambda x: int(min(255, x * r_factor)))
-    g = Image.eval(g, lambda x: int(min(255, x * g_factor)))
-    b = Image.eval(b, lambda x: int(min(255, x * b_factor)))
+    # 应用白平衡调整
+    r_balanced = np.clip(r_array * r_factor, 0, 255).astype(np.uint8)
+    g_balanced = np.clip(g_array * g_factor, 0, 255).astype(np.uint8)
+    b_balanced = np.clip(b_array * b_factor, 0, 255).astype(np.uint8)
 
-    balanced = Image.merge("RGB", (r, g, b))
+    # 重新构建图像
+    r_img = Image.fromarray(r_balanced)
+    g_img = Image.fromarray(g_balanced)
+    b_img = Image.fromarray(b_balanced)
+    balanced = Image.merge("RGB", (r_img, g_img, b_img))
 
-    # Enhance contrast and color
-    enhancer = ImageEnhance.Contrast(balanced)
-    enhanced = enhancer.enhance(1.2)
+    # Convert back to BGR for OpenCV
+    final_array = np.array(balanced)
+    return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
 
+
+def process_color_image(image, mode="adjusted"):
+    """
+    统一的彩色图像处理函数
+
+    Args:
+        image: 输入图像 (BGR格式)
+        mode: 处理模式
+            - "original": 原色彩模式，仅做轻微调整
+            - "adjusted": 调色模式，包含均衡化、白平衡和增强
+
+    Returns:
+        处理后的图像 (BGR格式)
+    """
+    if mode == "original":
+        # 原色彩模式：仅做透视矫正和适当的亮度调整
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+
+        # 仅做轻微的亮度和对比度调整
+        brightness_enhancer = ImageEnhance.Brightness(pil_image)
+        brightened = brightness_enhancer.enhance(1.1)  # 轻微提升亮度
+
+        contrast_enhancer = ImageEnhance.Contrast(brightened)
+        contrasted = contrast_enhancer.enhance(1.05)  # 轻微提升对比度
+
+        # Convert back to BGR for OpenCV
+        final_array = np.array(contrasted)
+        return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
+
+    else:  # mode == "adjusted"
+        # 调色模式：完整的处理流程
+        # 1. 先应用直方图均衡化
+        equalized_image = histogram_equalization(image)
+
+        # 2. 应用白平衡处理
+        white_balanced_image = apply_white_balance(equalized_image, "color")
+
+        # 3. 转换为PIL格式进行后续增强
+        image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+
+        # 4. 增强亮度调整
+        brightness_enhancer = ImageEnhance.Brightness(pil_image)
+        brightened = brightness_enhancer.enhance(1.2)
+
+        # 5. 增强对比度
+        contrast_enhancer = ImageEnhance.Contrast(brightened)
+        enhanced = contrast_enhancer.enhance(1.25)
+
+        # 6. 增强色彩饱和度
+        color_enhancer = ImageEnhance.Color(enhanced)
+        final = color_enhancer.enhance(1.15)
+
+        # Convert back to BGR for OpenCV
+        final_array = np.array(final)
+        return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
+
+
+def process_color(image):
+    """彩色图像后处理：调色和白平衡，增强版本"""
+    # 1. 先应用直方图均衡化
+    equalized_image = histogram_equalization(image)
+
+    # 2. 应用白平衡处理
+    white_balanced_image = apply_white_balance(equalized_image, "color")
+
+    # 3. 转换为PIL格式进行后续增强
+    image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(image_rgb)
+
+    # 4. 增强亮度调整
+    brightness_enhancer = ImageEnhance.Brightness(pil_image)
+    brightened = brightness_enhancer.enhance(1.1)
+
+    # 5. 增强对比度
+    contrast_enhancer = ImageEnhance.Contrast(brightened)
+    enhanced = contrast_enhancer.enhance(1.15)
+
+    # 6. 增强色彩饱和度
     color_enhancer = ImageEnhance.Color(enhanced)
     final = color_enhancer.enhance(1.1)
 
@@ -303,81 +514,108 @@ def process_color(image):
     return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
 
 
-def process_grayscale(image):
-    """黑白图像后处理：通过白平衡、亮度对比度调整，再转为黑白"""
-    # 首先进行彩色图像的白平衡和亮度调整
-    # Convert BGR to RGB for PIL processing
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+def process_grayscale_image(image, detail_level="standard"):
+    """
+    统一的黑白图像处理函数
+
+    Args:
+        image: 输入图像 (BGR格式)
+        detail_level: 细节级别
+            - "standard": 标准处理（未经均衡化）
+            - "more": 较多细节（轻度均衡化）
+            - "most": 更多细节（中度均衡化）
+            - "extreme": 暴力细节（重度均衡化）
+
+    Returns:
+        处理后的图像 (BGR格式)
+    """
+    # 定义不同级别的处理参数
+    params = {
+        "standard": {
+            "use_equalization": False,
+            "brightness": 1.1,
+            "contrast": 1.2,
+            "gamma": 0.9,
+            "final_contrast": 1.3,
+            "curve_strength": 1.5,
+        },
+        "more": {
+            "use_equalization": True,
+            "brightness": 1.15,
+            "contrast": 1.25,
+            "gamma": 0.85,
+            "final_contrast": 1.4,
+            "curve_strength": 1.8,
+        },
+        "most": {
+            "use_equalization": True,
+            "brightness": 1.1,
+            "contrast": 1.15,
+            "gamma": 0.95,
+            "final_contrast": 1.2,
+            "curve_strength": 1.3,
+        },
+        "extreme": {
+            "use_equalization": True,
+            "brightness": 1.05,
+            "contrast": 1.08,
+            "gamma": 0.98,
+            "final_contrast": 1.1,
+            "curve_strength": 1.1,
+        },
+    }
+
+    # 获取当前级别的参数
+    p = params.get(detail_level, params["standard"])
+
+    # 1. 可选的直方图均衡化
+    if p["use_equalization"]:
+        processed_image = histogram_equalization(image)
+        white_balanced_image = apply_white_balance(processed_image, "grayscale")
+    else:
+        # 标准模式：直接应用白平衡，不使用直方图均衡化
+        white_balanced_image = apply_white_balance(image, "grayscale")
+
+    # 2. 转换为PIL格式进行后续处理
+    image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(image_rgb)
 
-    # Auto white balance using PIL
-    r, g, b = pil_image.split()
+    # 3. 亮度调整
+    brightness_enhancer = ImageEnhance.Brightness(pil_image)
+    brightened = brightness_enhancer.enhance(p["brightness"])
 
-    # Calculate the average and adjust for white balance
-    r_avg = np.mean(np.array(r))
-    g_avg = np.mean(np.array(g))
-    b_avg = np.mean(np.array(b))
-
-    # Target gray level (slightly higher to make background whiter)
-    target = max(r_avg, g_avg, b_avg) * 1.1  # 使背景更亮
-
-    # Adjust each channel
-    r_factor = target / r_avg if r_avg > 0 else 1
-    g_factor = target / g_avg if g_avg > 0 else 1
-    b_factor = target / b_avg if b_avg > 0 else 1
-
-    # Apply factors with limits
-    r_factor = min(max(r_factor, 0.8), 2.5)
-    g_factor = min(max(g_factor, 0.8), 2.5)
-    b_factor = min(max(b_factor, 0.8), 2.5)
-
-    # Apply white balance
-    r = Image.eval(r, lambda x: int(min(255, x * r_factor)))
-    g = Image.eval(g, lambda x: int(min(255, x * g_factor)))
-    b = Image.eval(b, lambda x: int(min(255, x * b_factor)))
-
-    balanced = Image.merge("RGB", (r, g, b))
-
-    # 增强亮度，使底色更接近白色
-    brightness_enhancer = ImageEnhance.Brightness(balanced)
-    brightened = brightness_enhancer.enhance(1.3)  # 提高亮度
-
-    # 增强对比度
+    # 4. 对比度调整
     contrast_enhancer = ImageEnhance.Contrast(brightened)
-    contrasted = contrast_enhancer.enhance(1.6)  # 进一步提高对比度
+    contrasted = contrast_enhancer.enhance(p["contrast"])
 
-    # 转换为灰度图像
+    # 5. 转换为灰度
     grayscale = contrasted.convert("L")
 
-    # 进一步调整灰度图像的对比度和亮度
-    # 使用PIL的point方法进行gamma校正，使背景更白
+    # 6. Gamma校正
     def gamma_correct(x):
-        # Gamma校正，使亮的部分更亮，暗的部分保持对比度
         normalized = x / 255.0
-        corrected = pow(normalized, 0.75)  # 调整gamma值使对比更强
+        corrected = pow(normalized, p["gamma"])
         return int(corrected * 255)
 
     gamma_corrected = grayscale.point(gamma_correct)
 
-    # 再次增强对比度
+    # 7. 最终对比度调整
     final_contrast_enhancer = ImageEnhance.Contrast(gamma_corrected)
-    high_contrast = final_contrast_enhancer.enhance(1.8)  # 大幅提高对比度
+    contrast_enhanced = final_contrast_enhancer.enhance(p["final_contrast"])
 
-    # 使用曲线调整进一步增强黑白对比
-    def enhance_curve(x):
-        # S曲线调整，增强明暗对比
+    # 8. S曲线调整
+    def curve_adjust(x):
         normalized = x / 255.0
+        strength = p["curve_strength"]
         if normalized < 0.5:
-            # 暗部更暗
-            enhanced = 2 * normalized * normalized
+            enhanced = strength * normalized * normalized
         else:
-            # 亮部更亮
-            enhanced = 1 - 2 * (1 - normalized) * (1 - normalized)
+            enhanced = 1 - strength * (1 - normalized) * (1 - normalized)
         return int(min(255, max(0, enhanced * 255)))
 
-    curve_enhanced = high_contrast.point(enhance_curve)
+    curve_enhanced = contrast_enhanced.point(curve_adjust)
 
-    # 转换回3通道BGR格式
+    # 9. 转换回3通道BGR格式
     final_array = np.array(curve_enhanced)
     result = cv2.cvtColor(final_array, cv2.COLOR_GRAY2BGR)
 
