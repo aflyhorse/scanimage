@@ -145,7 +145,7 @@ scanimage/
 ├── Dockerfile            # Docker配置文件
 ├── .env.example          # 环境变量示例
 ├── templates/            # HTML模板
-│   └── index.html
+│   └── index.html.jinja2
 ├── static/               # 静态文件
 │   ├── css/
 │   │   └── style.css

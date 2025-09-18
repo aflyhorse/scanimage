@@ -90,6 +90,7 @@ function setupEventListeners() {
 
     // 重新开始按钮
     document.getElementById('start-over').addEventListener('click', startOver);
+    document.getElementById('start-over-step2').addEventListener('click', startOver);
 }
 
 async function handleFileUpload(event) {

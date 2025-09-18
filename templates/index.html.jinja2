@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% from 'bootstrap5/utils.html' import render_icon %}
 <html lang="zh-CN">
 
 <head>
@@ -9,8 +10,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 
-<body>
-    <div class="container-fluid py-4">
+<body class="d-flex flex-column min-vh-100">
+    <!-- GitHub Link -->
+    <a href="https://github.com/aflyhorse/scanimage" target="_blank" class="github-link"
+        aria-label="View source on GitHub">
+        {{ render_icon('github', size='2em') }}
+    </a>
+
+    <div class="container-fluid py-4 flex-grow-1">
         <div class="row">
             <div class="col-12">
                 <h1 class="text-center mb-4">图片透视校正工具</h1>
@@ -69,10 +76,15 @@
                         </div>
                         <div class="text-center">
                             <button id="process-btn" class="btn btn-success me-2" disabled>
-                                <i class="bi bi-gear"></i> 开始处理
+                                {{ render_icon('gear') }} 开始处理
                             </button>
                             <button id="reset-selection" class="btn btn-secondary">
-                                <i class="bi bi-arrow-clockwise"></i> 重置选择
+                                {{ render_icon('arrow-clockwise') }} 重置选择
+                            </button>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button id="start-over-step2" class="btn btn-link">
+                                {{ render_icon('arrow-left') }} 重新开始
                             </button>
                         </div>
                     </div>
@@ -94,18 +106,18 @@
                         </div>
                         <div class="text-center">
                             <button id="rotate-left" class="btn btn-outline-primary me-2">
-                                <i class="bi bi-arrow-counterclockwise"></i> 向左旋转
+                                {{ render_icon('arrow-counterclockwise') }} 向左旋转
                             </button>
                             <button id="rotate-right" class="btn btn-outline-primary me-2">
-                                <i class="bi bi-arrow-clockwise"></i> 向右旋转
+                                {{ render_icon('arrow-clockwise') }} 向右旋转
                             </button>
                             <button id="download-btn" class="btn btn-success">
-                                <i class="bi bi-download"></i> 下载图片
+                                {{ render_icon('download') }} 下载图片
                             </button>
                         </div>
                         <div class="text-center mt-3">
                             <button id="start-over" class="btn btn-link">
-                                <i class="bi bi-arrow-left"></i> 重新开始
+                                {{ render_icon('arrow-left') }} 重新开始
                             </button>
                         </div>
                     </div>
@@ -127,13 +139,24 @@
         <div id="error-container"></div>
     </div>
 
+    <!-- Footer -->
+    {% if footer_text %}
+    <footer class="footer mt-auto">
+        <div class="container">
+            <div class="text-center">
+                {{ footer_text|safe }}
+            </div>
+        </div>
+    </footer>
+    {% endif %}
+
     {{ bootstrap.load_js() }}
     <script>
         // set base API path for subdirectory deployment
         window.API_BASE = '{{ request.script_root or "" }}';
         console.log('API Base Path:', window.API_BASE);
     </script>
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ static_url('js/app.js') }}"></script>
 </body>
 
 </html>

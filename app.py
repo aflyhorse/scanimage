@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, url_for
 from flask_bootstrap import Bootstrap5
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageEnhance
@@ -32,6 +32,27 @@ os.makedirs(app.config["PROCESSED_FOLDER"], exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp"}
 
 
+@app.context_processor
+def inject_url_helpers():
+    """提供模板中使用的URL辅助函数"""
+
+    def static_url(filename):
+        """生成包含子路径的静态文件URL"""
+        script_root = request.script_root or ""
+        static_url_path = url_for("static", filename=filename)
+        return script_root + static_url_path
+
+    return dict(static_url=static_url)
+
+
+@app.context_processor
+def inject_footer_config():
+    """提供Footer配置"""
+    return dict(
+        footer_text=os.environ.get("FOOTER_TEXT", ""),
+    )
+
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -39,7 +60,7 @@ def allowed_file(filename):
 @app.route("/")
 def index():
     """主页面 - 图片上传界面"""
-    return render_template("index.html")
+    return render_template("index.html.jinja2")
 
 
 @app.route("/upload", methods=["POST"])
