@@ -187,9 +187,9 @@ body {
 
 /* GitHub链接样式 */
 .github-link {
-    position: fixed;
-    top: 20px;
-    right: 20px;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
     color: #6c757d;
     z-index: 1000;
     transition: color 0.3s ease, transform 0.2s ease;
