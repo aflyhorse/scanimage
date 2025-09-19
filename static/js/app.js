@@ -309,6 +309,7 @@ async function handleFileUpload(event) {
             savedState.selectedColorMode = colorModeElement ? colorModeElement.value : 'color';
             savedState.filename = result.filename;
             savedState.cropCorners = []; // 重置裁剪区域
+            savedState.actualCorners = []; // 重置实际坐标
 
             displayImageForSelection(result.image_data);
             showSection('selection-section');
@@ -952,7 +953,7 @@ function updateGrayscaleDescription() {
 }
 
 async function reprocessImage() {
-    if (!uploadedFilename || corners.length !== 4) {
+    if (!uploadedFilename) {
         showError('无法重新处理，请重新开始流程');
         return;
     }
@@ -971,13 +972,18 @@ async function reprocessImage() {
     // 重新加载原始图片以计算尺寸
     const img = new Image();
     img.onload = async function () {
-        const scaleX = img.naturalWidth / canvas.width;
-        const scaleY = img.naturalHeight / canvas.height;
+        let actualCorners = [];
 
-        const actualCorners = corners.map(corner => [
-            corner[0] * scaleX,
-            corner[1] * scaleY
-        ]);
+        // 只有当有选择角点时才计算实际坐标
+        if (corners.length === 4) {
+            const scaleX = img.naturalWidth / canvas.width;
+            const scaleY = img.naturalHeight / canvas.height;
+
+            actualCorners = corners.map(corner => [
+                corner[0] * scaleX,
+                corner[1] * scaleY
+            ]);
+        }
 
         showResultLoading(true);
 
@@ -1224,9 +1230,9 @@ async function switchColorMode(targetMode) {
         return;
     }
 
-    if (!savedState.actualCorners || savedState.actualCorners.length !== 4) {
-        showError('缺少裁剪区域信息，无法切换色彩模式');
-        return;
+    // 允许没有裁剪区域的情况（全图处理）
+    if (!savedState.actualCorners) {
+        savedState.actualCorners = [];
     }
 
     // 更新当前色彩模式
