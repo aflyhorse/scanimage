@@ -10,7 +10,7 @@ let canvasContainer = null;
 let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
 let currentColorMode = 'color'; // 当前处理的图像模式
-let currentProcessingOption = 'default'; // 当前处理选项
+let currentProcessingOption = 'original'; // 当前处理选项
 let debugMode = false; // 调试模式
 
 // 检测微信环境
@@ -780,7 +780,7 @@ async function processImage() {
                     filename: uploadedFilename,
                     corners: actualCorners,
                     color_mode: colorMode,
-                    processing_option: 'default'
+                    processing_option: 'original'
                 })
             });
 
@@ -788,7 +788,7 @@ async function processImage() {
 
             if (result.success) {
                 processedFilename = result.processed_filename;
-                currentProcessingOption = 'default';
+                currentProcessingOption = 'original';
                 displayProcessedImage(result.image_data);
                 setupProcessingOptions(colorMode);
                 showSection('result-section');
@@ -853,10 +853,10 @@ async function reprocessImage() {
     }
 
     // 获取当前选择的处理选项
-    let processingOption = 'default';
+    let processingOption = 'original';
     if (currentColorMode === 'color') {
         const selectedOption = document.querySelector('input[name="colorProcessing"]:checked');
-        processingOption = selectedOption ? selectedOption.value : 'default';
+        processingOption = selectedOption ? selectedOption.value : 'original';
     } else {
         // 黑白模式使用灰度处理选项
         const selectedOption = document.querySelector('input[name="grayscaleProcessing"]:checked');
@@ -978,7 +978,7 @@ function startOver() {
     isDragging = false;
     dragIndex = -1;
     currentColorMode = 'color';
-    currentProcessingOption = 'default';
+    currentProcessingOption = 'original';
 
     // 清除原始图片数据
     if (window.originalImageBase64) {

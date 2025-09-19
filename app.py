@@ -98,7 +98,7 @@ def process_image():
     filename = data.get("filename")
     corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
     color_mode = data.get("color_mode", "color")  # 'color' or 'grayscale'
-    processing_option = data.get("processing_option", "default")  # 新增处理选项
+    processing_option = data.get("processing_option", "original")  # 新增处理选项
 
     if not filename or not corners:
         return jsonify({"error": "缺少必要参数"}), 400
@@ -154,7 +154,7 @@ def reprocess_image():
     filename = data.get("filename")
     corners = data.get("corners")
     color_mode = data.get("color_mode", "color")
-    processing_option = data.get("processing_option", "default")
+    processing_option = data.get("processing_option", "original")
 
     if not filename or not corners:
         return jsonify({"error": "缺少必要参数"}), 400
