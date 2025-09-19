@@ -98,7 +98,7 @@ def process_image():
     filename = data.get("filename")
     corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
     color_mode = data.get("color_mode", "color")  # 'color' or 'grayscale'
-    processing_option = data.get("processing_option", "original")  # 新增处理选项
+    processing_option = data.get("processing_option", "adjusted")  # 新增处理选项
 
     if not filename or not corners:
         return jsonify({"error": "缺少必要参数"}), 400
@@ -154,7 +154,7 @@ def reprocess_image():
     filename = data.get("filename")
     corners = data.get("corners")
     color_mode = data.get("color_mode", "color")
-    processing_option = data.get("processing_option", "original")
+    processing_option = data.get("processing_option", "adjusted")
 
     if not filename or not corners:
         return jsonify({"error": "缺少必要参数"}), 400
@@ -427,6 +427,52 @@ def apply_white_balance(image, mode="color"):
     return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
 
 
+def lab_enhance(image, l_adjust=1.0, ab_adjust=1.0, equalization=False):
+    """
+    LAB色彩空间增强函数，统一处理亮度、色度调整和均衡化
+
+    Args:
+        image: 输入图像 (BGR格式)
+        l_adjust: L通道(亮度)调整系数，1.0表示不调整
+        ab_adjust: A和B通道(色度)调整系数，1.0表示不调整，>1.0增加饱和度
+        equalization: 是否进行直方图均衡化
+
+    Returns:
+        处理后的图像 (BGR格式)
+    """
+    # 如果需要均衡化，先进行直方图均衡化
+    if equalization:
+        image = histogram_equalization(image)
+
+    # 转换为LAB色彩空间
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+
+    # L通道(亮度)调整
+    if l_adjust != 1.0:
+        l_channel = np.clip(l_channel.astype(np.float32) * l_adjust, 0, 255).astype(
+            np.uint8
+        )
+
+    # A和B通道(色度)调整
+    if ab_adjust != 1.0:
+        # A和B通道的值域是-128到127，需要特殊处理
+        a_channel = np.clip(
+            (a_channel.astype(np.float32) - 128) * ab_adjust + 128, 0, 255
+        ).astype(np.uint8)
+        b_channel = np.clip(
+            (b_channel.astype(np.float32) - 128) * ab_adjust + 128, 0, 255
+        ).astype(np.uint8)
+
+    # 重新合并LAB通道
+    lab_enhanced = cv2.merge([l_channel, a_channel, b_channel])
+
+    # 转换回BGR色彩空间
+    bgr_enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+
+    return bgr_enhanced
+
+
 def process_color_image(image, mode="adjusted"):
     """
     统一的彩色图像处理函数
@@ -435,83 +481,46 @@ def process_color_image(image, mode="adjusted"):
         image: 输入图像 (BGR格式)
         mode: 处理模式
             - "original": 原色彩模式，仅做轻微调整
-            - "adjusted": 调色模式，包含均衡化、白平衡和增强
+            - "adjusted": 调色模式，使用lab_enhance进行增强
+            - "enhanced": 暴力上色模式，开启均衡化的强化处理
 
     Returns:
         处理后的图像 (BGR格式)
     """
     if mode == "original":
-        # 原色彩模式：仅做透视矫正和适当的亮度调整
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(image_rgb)
+        # 原色彩模式：使用lab_enhance进行轻微调整
+        return lab_enhance(
+            image,
+            l_adjust=1.1,  # 轻微提升亮度
+            ab_adjust=1.02,  # 轻微提升色彩饱和度
+            equalization=False,  # 不进行均衡化
+        )
 
-        # 仅做轻微的亮度和对比度调整
-        brightness_enhancer = ImageEnhance.Brightness(pil_image)
-        brightened = brightness_enhancer.enhance(1.1)  # 轻微提升亮度
+    elif mode == "enhanced":
+        # 暴力上色模式：开启均衡化的强化处理
+        # 先应用白平衡处理
+        white_balanced_image = apply_white_balance(image, "color")
 
-        contrast_enhancer = ImageEnhance.Contrast(brightened)
-        contrasted = contrast_enhancer.enhance(1.05)  # 轻微提升对比度
-
-        # Convert back to BGR for OpenCV
-        final_array = np.array(contrasted)
-        return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
+        # 然后使用lab_enhance进行强化增强
+        return lab_enhance(
+            white_balanced_image,
+            l_adjust=1.3,  # 大幅提升亮度
+            ab_adjust=1.25,  # 大幅增强色彩饱和度
+            equalization=True,  # 开启均衡化
+        )
 
     else:  # mode == "adjusted"
-        # 调色模式：完整的处理流程
-        # 1. 先应用直方图均衡化
-        equalized_image = histogram_equalization(image)
+        # 调色模式：使用lab_enhance进行完整处理
+        # 先应用白平衡处理
+        white_balanced_image = apply_white_balance(image, "color")
 
-        # 2. 应用白平衡处理
-        white_balanced_image = apply_white_balance(equalized_image, "color")
-
-        # 3. 转换为PIL格式进行后续增强
-        image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(image_rgb)
-
-        # 4. 增强亮度调整
-        brightness_enhancer = ImageEnhance.Brightness(pil_image)
-        brightened = brightness_enhancer.enhance(1.2)
-
-        # 5. 增强对比度
-        contrast_enhancer = ImageEnhance.Contrast(brightened)
-        enhanced = contrast_enhancer.enhance(1.25)
-
-        # 6. 增强色彩饱和度
-        color_enhancer = ImageEnhance.Color(enhanced)
-        final = color_enhancer.enhance(1.15)
-
-        # Convert back to BGR for OpenCV
-        final_array = np.array(final)
-        return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
-
-
-def process_color(image):
-    """彩色图像后处理：调色和白平衡，增强版本"""
-    # 1. 先应用直方图均衡化
-    equalized_image = histogram_equalization(image)
-
-    # 2. 应用白平衡处理
-    white_balanced_image = apply_white_balance(equalized_image, "color")
-
-    # 3. 转换为PIL格式进行后续增强
-    image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
-    pil_image = Image.fromarray(image_rgb)
-
-    # 4. 增强亮度调整
-    brightness_enhancer = ImageEnhance.Brightness(pil_image)
-    brightened = brightness_enhancer.enhance(1.1)
-
-    # 5. 增强对比度
-    contrast_enhancer = ImageEnhance.Contrast(brightened)
-    enhanced = contrast_enhancer.enhance(1.15)
-
-    # 6. 增强色彩饱和度
-    color_enhancer = ImageEnhance.Color(enhanced)
-    final = color_enhancer.enhance(1.1)
-
-    # Convert back to BGR for OpenCV
-    final_array = np.array(final)
-    return cv2.cvtColor(final_array, cv2.COLOR_RGB2BGR)
+        # 然后使用lab_enhance进行增强
+        return lab_enhance(
+            white_balanced_image,
+            l_adjust=1.2,  # 提升亮度
+            ab_adjust=1.15,  # 增强色彩饱和度
+            equalization=False,  # 均衡化效果不好，也不进行均衡化
+        )
 
 
 def process_grayscale_image(image, detail_level="standard"):

@@ -10,7 +10,7 @@ let canvasContainer = null;
 let originalImageData = null;
 let lastColorMode = 'color'; // 记住上次选择的输出模式
 let currentColorMode = 'color'; // 当前处理的图像模式
-let currentProcessingOption = 'original'; // 当前处理选项
+let currentProcessingOption = 'adjusted'; // 当前处理选项
 let debugMode = false; // 调试模式
 
 // 检测微信环境
@@ -780,7 +780,7 @@ async function processImage() {
                     filename: uploadedFilename,
                     corners: actualCorners,
                     color_mode: colorMode,
-                    processing_option: 'original'
+                    processing_option: 'adjusted'
                 })
             });
 
@@ -788,7 +788,7 @@ async function processImage() {
 
             if (result.success) {
                 processedFilename = result.processed_filename;
-                currentProcessingOption = 'original';
+                currentProcessingOption = 'adjusted';
                 displayProcessedImage(result.image_data);
                 setupProcessingOptions(colorMode);
                 showSection('result-section');
@@ -814,9 +814,9 @@ function setupProcessingOptions(colorMode) {
     if (colorMode === 'color') {
         colorOptions.classList.remove('d-none');
         grayscaleOptions.classList.add('d-none');
-        // 重置选项为原色彩默认值
-        document.getElementById('color-original').checked = true;
-        currentProcessingOption = 'original';
+        // 重置选项为自动调色默认值
+        document.getElementById('color-adjusted').checked = true;
+        currentProcessingOption = 'adjusted';
     } else {
         colorOptions.classList.add('d-none');
         grayscaleOptions.classList.remove('d-none');
@@ -853,10 +853,10 @@ async function reprocessImage() {
     }
 
     // 获取当前选择的处理选项
-    let processingOption = 'original';
+    let processingOption = 'adjusted';
     if (currentColorMode === 'color') {
         const selectedOption = document.querySelector('input[name="colorProcessing"]:checked');
-        processingOption = selectedOption ? selectedOption.value : 'original';
+        processingOption = selectedOption ? selectedOption.value : 'adjusted';
     } else {
         // 黑白模式使用灰度处理选项
         const selectedOption = document.querySelector('input[name="grayscaleProcessing"]:checked');
@@ -978,7 +978,7 @@ function startOver() {
     isDragging = false;
     dragIndex = -1;
     currentColorMode = 'color';
-    currentProcessingOption = 'original';
+    currentProcessingOption = 'adjusted';
 
     // 清除原始图片数据
     if (window.originalImageBase64) {
@@ -1001,8 +1001,8 @@ function startOver() {
         colorModeRadio.checked = true;
     }
 
-    // 重置处理选项 - 原色彩为默认
-    document.getElementById('color-original').checked = true;
+    // 重置处理选项 - 自动调色为默认
+    document.getElementById('color-adjusted').checked = true;
 
     // 重置细节级别显示
     updateDetailLevelDisplay();

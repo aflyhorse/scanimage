@@ -107,13 +107,16 @@
                             <!-- 彩色图片选项 -->
                             <div id="color-processing-options" class="d-none">
                                 <div class="btn-group" role="group" aria-label="彩色处理选项">
-                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-original" value="original" checked>
+                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-original" value="original">
                                     <label class="btn btn-outline-primary" for="color-original">原色彩</label>
                                     
-                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-adjusted" value="default">
+                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-adjusted" value="adjusted" checked>
                                     <label class="btn btn-outline-secondary" for="color-adjusted">自动调色</label>
+                                    
+                                    <input type="radio" class="btn-check" name="colorProcessing" id="color-enhanced" value="enhanced">
+                                    <label class="btn btn-outline-warning" for="color-enhanced">暴力上色</label>
                                 </div>
-                                <div class="form-text">原色彩：仅做透视矫正和适当亮度调整；自动调色：进行色彩和白平衡调整</div>
+                                <div class="form-text">原色彩：仅做透视矫正和适当亮度调整；自动调色：进行色彩和白平衡调整；暴力上色：开启均衡化的强化处理</div>
                             </div>
                             
                             <!-- 黑白图片选项 -->
