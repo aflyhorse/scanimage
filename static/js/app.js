@@ -870,10 +870,12 @@ function updateGrayscaleDescription() {
 
     if (selectedOption && description) {
         const descriptions = {
+            'minimal': '仅转换黑白：轻度处理，保持原始色调和层次',
             'standard': '标准灰度处理，平衡的细节保留和对比度',
             'more': '保留更多细节，增强纹理和层次感',
             'most': '最大程度保留细节，适合复杂文档',
-            'extreme': '极致细节增强，适合淡色或低对比度文档'
+            'extreme': '极致细节增强，适合淡色或低对比度文档',
+            'silhouette': '极简剪影：高对比度二值化处理，突出轮廓'
         };
 
         description.textContent = descriptions[selectedOption.value] || '标准灰度处理';

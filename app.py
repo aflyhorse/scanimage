@@ -530,16 +530,54 @@ def process_grayscale_image(image, detail_level="standard"):
     Args:
         image: 输入图像 (BGR格式)
         detail_level: 细节级别
+            - "minimal": 仅转换黑白（轻度CLAHE和高斯模糊）
             - "standard": 标准处理（未经均衡化）
             - "more": 较多细节（轻度CLAHE）
             - "most": 更多细节（中度CLAHE）
             - "extreme": 暴力细节（重度CLAHE）
+            - "silhouette": 极简剪影（Otsu算法）
 
     Returns:
         处理后的图像 (BGR格式)
     """
+
+    # 特殊处理：极简剪影效果（修正的Otsu算法）
+    if detail_level == "silhouette":
+        # 转换为LAB色彩空间
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        L, A, B = cv2.split(lab)
+
+        # 应用高斯模糊减少噪声影响
+        L_blurred = cv2.GaussianBlur(L, (3, 3), 0)
+
+        # 使用Otsu算法自动确定最佳阈值，然后提高阈值以保留更多细、浅的像素
+        otsu_threshold, _ = cv2.threshold(
+            L_blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+        adjusted_threshold = (
+            otsu_threshold * 1.15
+        )  # 提高阈值15%以保留更多细节和浅色像素
+
+        # 应用调整后的阈值
+        _, L_binary = cv2.threshold(
+            L_blurred, adjusted_threshold, 255, cv2.THRESH_BINARY
+        )
+
+        # 轻微形态学操作平滑边缘
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        L_final = cv2.morphologyEx(L_binary, cv2.MORPH_CLOSE, kernel)
+
+        # 转换回3通道BGR格式
+        return cv2.cvtColor(L_final, cv2.COLOR_GRAY2BGR)
+
     # 定义不同级别的处理参数
     params = {
+        "minimal": {
+            "use_clahe": True,
+            "clip_limit": 1.5,
+            "tile_grid_size": (8, 8),
+            "use_minimal_processing": True,  # 特殊标记，只做轻度CLAHE和高斯模糊
+        },
         "standard": {
             "use_clahe": False,
             "brightness": 1.1,
@@ -586,24 +624,36 @@ def process_grayscale_image(image, detail_level="standard"):
     # 1. 先转换为灰度图像
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 2. CLAHE处理
-    if p["use_clahe"]:
-        histogram_image = histogram_equalization(
-            gray_image, p["clip_limit"], p["tile_grid_size"]
+    # 特殊处理：仅转换黑白（minimal模式）
+    if p.get("use_minimal_processing", False):
+        # 轻度CLAHE处理
+        clahe = cv2.createCLAHE(
+            clipLimit=p["clip_limit"], tileGridSize=p["tile_grid_size"]
         )
+        clahe_image = clahe.apply(gray_image)
 
-    # 3. 高斯模糊后转换为PIL格式进行后续处理
-    pil_image = Image.fromarray(
-        cv2.GaussianBlur(histogram_image, (0, 0), 0.3), mode="L"
-    )
+        # 高斯模糊
+        blurred_image = cv2.GaussianBlur(clahe_image, (3, 3), 0.5)
+
+        # 转换回3通道BGR格式
+        return cv2.cvtColor(blurred_image, cv2.COLOR_GRAY2BGR)
+
+    # 2. CLAHE处理（非minimal模式）
+    if p.get("use_clahe", False):
+        clahe = cv2.createCLAHE(
+            clipLimit=p["clip_limit"], tileGridSize=p["tile_grid_size"]
+        )
+        processed_image = clahe.apply(gray_image)
+    else:
+        processed_image = gray_image
+
+    # 3. 转换为PIL格式进行后续处理
+    pil_image = Image.fromarray(processed_image, mode="L")
 
     # 4. 亮度调整
     brightness_enhancer = ImageEnhance.Brightness(pil_image)
     brightened = brightness_enhancer.enhance(p["brightness"])
 
-    # 5. 对比度调整
-    contrast_enhancer = ImageEnhance.Contrast(brightened)
-    contrasted = contrast_enhancer.enhance(p["contrast"])
     # 5. 对比度调整
     contrast_enhancer = ImageEnhance.Contrast(brightened)
     contrasted = contrast_enhancer.enhance(p["contrast"])

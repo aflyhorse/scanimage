@@ -126,6 +126,9 @@
                             <div id="grayscale-processing-options" class="d-none">
                                 <div class="mb-2">
                                     <div class="btn-group" role="group" aria-label="黑白处理选项">
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-minimal" value="minimal">
+                                        <label class="btn btn-outline-secondary" for="grayscale-minimal">仅转换</label>
+                                        
                                         <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-standard" value="standard" checked>
                                         <label class="btn btn-outline-primary" for="grayscale-standard">标准</label>
                                         
@@ -137,6 +140,9 @@
                                         
                                         <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-extreme" value="extreme">
                                         <label class="btn btn-outline-warning" for="grayscale-extreme">暴力细节</label>
+                                        
+                                        <input type="radio" class="btn-check" name="grayscaleProcessing" id="grayscale-silhouette" value="silhouette">
+                                        <label class="btn btn-outline-dark" for="grayscale-silhouette">极简剪影</label>
                                     </div>
                                 </div>
                                 <div class="form-text">
