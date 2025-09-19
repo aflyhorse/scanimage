@@ -145,9 +145,18 @@
                             </div>
                         </div>
                         
-                        <div class="text-center mb-3">
+                        <div class="text-center mb-3 position-relative">
                             <img id="result-image" class="img-fluid"
                                 style="max-height: 600px; border: 2px solid #dee2e6;">
+                            <!-- 结果图片Loading层 -->
+                            <div id="result-loading" class="d-none position-absolute top-50 start-50 translate-middle">
+                                <div class="d-flex flex-column align-items-center">
+                                    <div class="spinner-border text-primary mb-2" role="status">
+                                        <span class="visually-hidden">处理中...</span>
+                                    </div>
+                                    <small class="text-muted">处理中，请稍候...</small>
+                                </div>
+                            </div>
                         </div>
                         <div class="text-center">
                             <button id="rotate-left" class="btn btn-outline-primary me-2">

@@ -908,7 +908,7 @@ async function reprocessImage() {
             corner[1] * scaleY
         ]);
 
-        showLoading(true);
+        showResultLoading(true);
 
         try {
             const response = await fetch(getApiUrl('/reprocess'), {
@@ -936,7 +936,7 @@ async function reprocessImage() {
         } catch (error) {
             showError('重新处理失败: ' + error.message);
         } finally {
-            showLoading(false);
+            showResultLoading(false);
         }
     };
 
@@ -1064,6 +1064,19 @@ function showLoading(show) {
     }
 }
 
+function showResultLoading(show) {
+    const resultLoading = document.getElementById('result-loading');
+    const resultImage = document.getElementById('result-image');
+    if (show) {
+        resultLoading.classList.remove('d-none');
+        // 可选：让图片稍微半透明显示处理中状态
+        resultImage.style.opacity = '0.6';
+    } else {
+        resultLoading.classList.add('d-none');
+        resultImage.style.opacity = '1';
+    }
+}
+
 function showError(message) {
     const container = document.getElementById('error-container');
     const alert = document.createElement('div');
@@ -1152,7 +1165,7 @@ async function switchColorMode(targetMode) {
     updateColorModeButtons(targetMode);
 
     // 根据新的模式重新处理图片
-    showLoading(true);
+    showResultLoading(true);
 
     try {
         const response = await fetch(getApiUrl('/reprocess'), {
@@ -1181,7 +1194,7 @@ async function switchColorMode(targetMode) {
     } catch (error) {
         showError('重新处理失败: ' + error.message);
     } finally {
-        showLoading(false);
+        showResultLoading(false);
     }
 }
 
