@@ -96,8 +96,11 @@
         <div class="row mb-4 d-none" id="result-section">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">步骤 3: 处理结果</h5>
+                        <button id="back-to-step2" class="btn btn-outline-secondary btn-sm">
+                            {{ render_icon('arrow-left') }} 调整裁剪区域
+                        </button>
                     </div>
                     <div class="card-body">
                         <!-- 处理选项切换 -->
@@ -156,6 +159,18 @@
                             <button id="download-btn" class="btn btn-success">
                                 {{ render_icon('download') }} 下载图片
                             </button>
+                        </div>
+                        
+                        <!-- 色彩模式切换按钮 -->
+                        <div class="text-center mt-3">
+                            <div class="btn-group" role="group" aria-label="色彩模式切换">
+                                <button id="switch-to-color" class="btn btn-outline-info" data-mode="color">
+                                    {{ render_icon('palette') }} 彩色模式
+                                </button>
+                                <button id="switch-to-grayscale" class="btn btn-outline-secondary" data-mode="grayscale">
+                                    {{ render_icon('circle-half') }} 黑白模式
+                                </button>
+                            </div>
                         </div>
                         <div class="text-center mt-3">
                             <button id="start-over" class="btn btn-link">

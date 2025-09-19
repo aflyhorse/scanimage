@@ -13,6 +13,15 @@ let currentColorMode = 'color'; // 当前处理的图像模式
 let currentProcessingOption = 'adjusted'; // 当前处理选项
 let debugMode = false; // 调试模式
 
+// 状态保存变量
+let savedState = {
+    uploadedImage: null,        // 保存上传的图片数据
+    selectedColorMode: 'color', // 保存选择的色彩模式
+    cropCorners: [],           // 保存裁剪区域坐标(canvas坐标)
+    actualCorners: [],         // 保存实际裁剪坐标(原始图片坐标)
+    filename: ''               // 保存文件名
+};
+
 // 检测微信环境
 function isWechat() {
     return /MicroMessenger/i.test(navigator.userAgent);
@@ -253,6 +262,13 @@ function setupEventListeners() {
     // 重新开始按钮
     document.getElementById('start-over').addEventListener('click', startOver);
     document.getElementById('start-over-step2').addEventListener('click', startOver);
+
+    // 后退按钮
+    document.getElementById('back-to-step2').addEventListener('click', backToStep2);
+
+    // 色彩模式切换按钮
+    document.getElementById('switch-to-color').addEventListener('click', () => switchColorMode('color'));
+    document.getElementById('switch-to-grayscale').addEventListener('click', () => switchColorMode('grayscale'));
 }
 
 async function handleFileUpload(event) {
@@ -285,6 +301,14 @@ async function handleFileUpload(event) {
 
         if (result.success) {
             uploadedFilename = result.filename;
+
+            // 保存当前状态
+            const colorModeElement = document.querySelector('input[name="colorMode"]:checked');
+            savedState.uploadedImage = result.image_data;
+            savedState.selectedColorMode = colorModeElement ? colorModeElement.value : 'color';
+            savedState.filename = result.filename;
+            savedState.cropCorners = []; // 重置裁剪区域
+
             displayImageForSelection(result.image_data);
             showSection('selection-section');
         } else {
@@ -756,6 +780,9 @@ async function processImage() {
     currentColorMode = colorMode;
     localStorage.setItem('scanimage-color-mode', colorMode);
 
+    // 保存裁剪区域坐标到状态
+    savedState.cropCorners = [...corners];
+
     // 直接使用canvas的尺寸和原始图片的尺寸计算缩放比例
     // 这里需要从displayImageForSelection函数获取原始图片尺寸
     const img = new Image();
@@ -767,6 +794,9 @@ async function processImage() {
             corner[0] * scaleX,
             corner[1] * scaleY
         ]);
+
+        // 保存实际坐标（原始图片尺寸）用于重新处理
+        savedState.actualCorners = actualCorners;
 
         showLoading(true);
 
@@ -827,6 +857,9 @@ function setupProcessingOptions(colorMode) {
         }
         currentProcessingOption = 'standard';
     }
+
+    // 更新色彩模式切换按钮状态
+    updateColorModeButtons(colorMode);
 }
 
 // 更新灰度处理选项描述
@@ -1069,4 +1102,113 @@ function showInfo(message) {
 function clearErrors() {
     const container = document.getElementById('error-container');
     container.innerHTML = '';
+}
+
+// 后退到步骤2 - 调整裁剪区域
+function backToStep2() {
+    if (!savedState.uploadedImage) {
+        showError('没有保存的图片数据，请重新上传');
+        return;
+    }
+
+    // 恢复图片显示
+    displayImageForSelection(savedState.uploadedImage);
+
+    // 显示步骤2
+    showSection('selection-section');
+
+    // 恢复裁剪区域（如果有的话）需要在图片加载完成后
+    if (savedState.cropCorners && savedState.cropCorners.length === 4) {
+        // 使用setTimeout确保图片已经加载完成
+        setTimeout(() => {
+            corners = [...savedState.cropCorners];
+            drawSelection();
+            updateCornerPoints(); // 显示可拖拽的角点
+            updateProcessButton();
+        }, 100);
+    }
+
+    // 清空错误信息
+    clearErrors();
+}
+
+// 切换色彩模式（在步骤3中使用）
+async function switchColorMode(targetMode) {
+    if (!processedFilename) {
+        showError('没有处理过的图片，无法切换色彩模式');
+        return;
+    }
+
+    if (!savedState.actualCorners || savedState.actualCorners.length !== 4) {
+        showError('缺少裁剪区域信息，无法切换色彩模式');
+        return;
+    }
+
+    // 更新当前色彩模式
+    currentColorMode = targetMode;
+
+    // 更新按钮状态
+    updateColorModeButtons(targetMode);
+
+    // 根据新的模式重新处理图片
+    showLoading(true);
+
+    try {
+        const response = await fetch(getApiUrl('/reprocess'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                filename: savedState.filename,
+                corners: savedState.actualCorners,
+                color_mode: targetMode,
+                processing_option: getCurrentProcessingOption(targetMode),
+                processed_filename: processedFilename
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            processedFilename = result.processed_filename;
+            displayProcessedImage(result.image_data);
+            setupProcessingOptions(targetMode);
+        } else {
+            showError(result.error || '重新处理失败');
+        }
+    } catch (error) {
+        showError('重新处理失败: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 更新色彩模式按钮状态
+function updateColorModeButtons(activeMode) {
+    const colorBtn = document.getElementById('switch-to-color');
+    const grayscaleBtn = document.getElementById('switch-to-grayscale');
+
+    if (activeMode === 'color') {
+        colorBtn.classList.remove('btn-outline-info');
+        colorBtn.classList.add('btn-info');
+        grayscaleBtn.classList.remove('btn-secondary');
+        grayscaleBtn.classList.add('btn-outline-secondary');
+    } else {
+        colorBtn.classList.remove('btn-info');
+        colorBtn.classList.add('btn-outline-info');
+        grayscaleBtn.classList.remove('btn-outline-secondary');
+        grayscaleBtn.classList.add('btn-secondary');
+    }
+}
+
+// 获取当前处理选项
+function getCurrentProcessingOption(colorMode) {
+    if (colorMode === 'color') {
+        const checkedOption = document.querySelector('input[name="colorProcessing"]:checked');
+        return checkedOption ? checkedOption.value : 'adjusted';
+    } else {
+        const checkedOption = document.querySelector('input[name="grayscaleProcessing"]:checked');
+        return checkedOption ? checkedOption.value : 'standard';
+    }
 }
