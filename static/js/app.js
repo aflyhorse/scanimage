@@ -265,6 +265,7 @@ function setupEventListeners() {
 
     // 后退按钮
     document.getElementById('back-to-step2').addEventListener('click', backToStep2);
+    document.getElementById('adjust-crop-bottom').addEventListener('click', backToStep2);
 
     // 色彩模式切换按钮
     document.getElementById('switch-to-color').addEventListener('click', () => switchColorMode('color'));
