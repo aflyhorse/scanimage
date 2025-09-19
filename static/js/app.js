@@ -766,12 +766,40 @@ function resetSelection() {
 
 function updateProcessButton() {
     const processBtn = document.getElementById('process-btn');
-    processBtn.disabled = corners.length !== 4;
+    const processIcon = processBtn.querySelector('.bi-gear') || processBtn.querySelector('[data-bs-icon="gear"]');
+
+    if (corners.length === 0) {
+        // 没有选择任何角点，按钮变为"处理全图"
+        processBtn.disabled = false;
+        if (processIcon) {
+            processBtn.innerHTML = processBtn.innerHTML.replace(/开始处理|处理全图/, '处理全图');
+        } else {
+            // 如果没有找到图标，直接替换文本
+            processBtn.textContent = processBtn.textContent.replace(/开始处理|处理全图/, '处理全图');
+        }
+    } else if (corners.length === 4) {
+        // 选择了4个角点，按钮变为"开始处理"
+        processBtn.disabled = false;
+        if (processIcon) {
+            processBtn.innerHTML = processBtn.innerHTML.replace(/开始处理|处理全图/, '开始处理');
+        } else {
+            processBtn.textContent = processBtn.textContent.replace(/开始处理|处理全图/, '开始处理');
+        }
+    } else {
+        // 选择了1-3个角点，按钮禁用
+        processBtn.disabled = true;
+        if (processIcon) {
+            processBtn.innerHTML = processBtn.innerHTML.replace(/开始处理|处理全图/, '开始处理');
+        } else {
+            processBtn.textContent = processBtn.textContent.replace(/开始处理|处理全图/, '开始处理');
+        }
+    }
 }
 
 async function processImage() {
-    if (corners.length !== 4) {
-        showError('请选择四个角点');
+    // 验证条件：要么有4个角点，要么没有角点（处理全图）
+    if (corners.length !== 0 && corners.length !== 4) {
+        showError('请选择四个角点或不选择任何区域直接处理全图');
         return;
     }
 
@@ -784,6 +812,47 @@ async function processImage() {
     // 保存裁剪区域坐标到状态
     savedState.cropCorners = [...corners];
 
+    // 如果没有选择角点，直接发送null给后端
+    if (corners.length === 0) {
+        // 保存实际坐标为空数组
+        savedState.actualCorners = [];
+
+        showLoading(true);
+
+        try {
+            const response = await fetch(getApiUrl('/process'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: uploadedFilename,
+                    corners: null, // 发送null表示处理全图
+                    color_mode: colorMode,
+                    processing_option: 'adjusted'
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                processedFilename = result.processed_filename;
+                currentProcessingOption = 'adjusted';
+                displayProcessedImage(result.image_data);
+                setupProcessingOptions(colorMode);
+                showSection('result-section');
+            } else {
+                showError(result.error || '处理失败');
+            }
+        } catch (error) {
+            showError('处理失败: ' + error.message);
+        } finally {
+            showLoading(false);
+        }
+        return;
+    }
+
+    // 有4个角点的情况，原有逻辑
     // 直接使用canvas的尺寸和原始图片的尺寸计算缩放比例
     // 这里需要从displayImageForSelection函数获取原始图片尺寸
     const img = new Image();

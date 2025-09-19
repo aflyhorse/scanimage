@@ -96,12 +96,12 @@ def process_image():
     """处理图像透视校正和后处理"""
     data = request.get_json()
     filename = data.get("filename")
-    corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+    corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] or None
     color_mode = data.get("color_mode", "color")  # 'color' or 'grayscale'
     processing_option = data.get("processing_option", "adjusted")  # 新增处理选项
 
-    if not filename or not corners:
-        return jsonify({"error": "缺少必要参数"}), 400
+    if not filename:
+        return jsonify({"error": "缺少文件名参数"}), 400
 
     try:
         # Load image
@@ -110,8 +110,12 @@ def process_image():
         if image is None:
             return jsonify({"error": "无法读取图像文件"}), 400
 
-        # Perspective correction
-        corrected_image = perspective_correction(image, corners)
+        # Perspective correction only if corners are provided
+        if corners and len(corners) == 4:
+            corrected_image = perspective_correction(image, corners)
+        else:
+            # No corners provided, use the whole image without perspective correction
+            corrected_image = image
 
         # Post-processing based on color mode and processing option
         if color_mode == "grayscale":
@@ -156,8 +160,8 @@ def reprocess_image():
     color_mode = data.get("color_mode", "color")
     processing_option = data.get("processing_option", "adjusted")
 
-    if not filename or not corners:
-        return jsonify({"error": "缺少必要参数"}), 400
+    if not filename:
+        return jsonify({"error": "缺少文件名参数"}), 400
 
     try:
         # Load original image
@@ -166,8 +170,12 @@ def reprocess_image():
         if image is None:
             return jsonify({"error": "无法读取图像文件"}), 400
 
-        # Perspective correction
-        corrected_image = perspective_correction(image, corners)
+        # Perspective correction only if corners are provided
+        if corners and len(corners) == 4:
+            corrected_image = perspective_correction(image, corners)
+        else:
+            # No corners provided, use the whole image without perspective correction
+            corrected_image = image
 
         # Post-processing based on color mode and processing option
         if color_mode == "grayscale":
