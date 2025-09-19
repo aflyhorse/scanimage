@@ -321,7 +321,7 @@ def perspective_correction(image, corners):
     return corrected
 
 
-def histogram_equalization(image):
+def histogram_equalization(image, clip_limit=3.0, tile_grid_size=(8, 8)):
     """直方图均衡化处理，支持彩色和灰度图像"""
     # 判断是彩色还是灰度图像
     if len(image.shape) == 3:
@@ -330,7 +330,7 @@ def histogram_equalization(image):
         l_channel, a_channel, b_channel = cv2.split(lab)
 
         # 对L通道进行CLAHE（限制对比度自适应直方图均衡化）
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
         l_equalized = clahe.apply(l_channel)
 
         # 重新合并通道
@@ -342,7 +342,7 @@ def histogram_equalization(image):
         return result
     else:
         # 灰度图像：直接进行CLAHE
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
         return clahe.apply(image)
 
 
@@ -383,8 +383,8 @@ def apply_white_balance(image, mode="color"):
         g_avg = get_robust_mean(g_array)
         b_avg = get_robust_mean(b_array)
 
-        # 使用加权平均，给绿色通道更多权重（因为人眼对绿色最敏感）
-        target = r_avg * 0.3 + g_avg * 0.5 + b_avg * 0.2
+        # 使用 Rec.601 加权平均
+        target = r_avg * 0.299 + g_avg * 0.587 + b_avg * 0.114
 
         # 因子限制范围
         factor_range = (0.8, 1.5)
@@ -395,8 +395,8 @@ def apply_white_balance(image, mode="color"):
         g_avg = np.mean(g_array)
         b_avg = np.mean(b_array)
 
-        # 使用较为保守的目标值，保留更多原始色调信息
-        target = (r_avg + g_avg + b_avg) / 3 * 1.05
+        # 使用 Rec.601 加权平均
+        target = r_avg * 0.299 + g_avg * 0.587 + b_avg * 0.114
 
         # 更保守的因子限制，保留更多细节
         factor_range = (0.85, 1.5)
@@ -531,9 +531,9 @@ def process_grayscale_image(image, detail_level="standard"):
         image: 输入图像 (BGR格式)
         detail_level: 细节级别
             - "standard": 标准处理（未经均衡化）
-            - "more": 较多细节（轻度均衡化）
-            - "most": 更多细节（中度均衡化）
-            - "extreme": 暴力细节（重度均衡化）
+            - "more": 较多细节（轻度CLAHE）
+            - "most": 更多细节（中度CLAHE）
+            - "extreme": 暴力细节（重度CLAHE）
 
     Returns:
         处理后的图像 (BGR格式)
@@ -541,7 +541,7 @@ def process_grayscale_image(image, detail_level="standard"):
     # 定义不同级别的处理参数
     params = {
         "standard": {
-            "use_equalization": False,
+            "use_clahe": False,
             "brightness": 1.1,
             "contrast": 1.2,
             "gamma": 0.9,
@@ -549,7 +549,9 @@ def process_grayscale_image(image, detail_level="standard"):
             "curve_strength": 1.5,
         },
         "more": {
-            "use_equalization": True,
+            "use_clahe": True,
+            "clip_limit": 2.0,
+            "tile_grid_size": (8, 8),
             "brightness": 1.15,
             "contrast": 1.25,
             "gamma": 0.85,
@@ -557,7 +559,9 @@ def process_grayscale_image(image, detail_level="standard"):
             "curve_strength": 1.8,
         },
         "most": {
-            "use_equalization": True,
+            "use_clahe": True,
+            "clip_limit": 3.0,
+            "tile_grid_size": (8, 8),
             "brightness": 1.1,
             "contrast": 1.15,
             "gamma": 0.95,
@@ -565,7 +569,9 @@ def process_grayscale_image(image, detail_level="standard"):
             "curve_strength": 1.3,
         },
         "extreme": {
-            "use_equalization": True,
+            "use_clahe": True,
+            "clip_limit": 4.0,
+            "tile_grid_size": (6, 6),
             "brightness": 1.05,
             "contrast": 1.08,
             "gamma": 0.98,
@@ -577,28 +583,30 @@ def process_grayscale_image(image, detail_level="standard"):
     # 获取当前级别的参数
     p = params.get(detail_level, params["standard"])
 
-    # 1. 可选的直方图均衡化
-    if p["use_equalization"]:
-        processed_image = histogram_equalization(image)
-        white_balanced_image = apply_white_balance(processed_image, "grayscale")
-    else:
-        # 标准模式：直接应用白平衡，不使用直方图均衡化
-        white_balanced_image = apply_white_balance(image, "grayscale")
+    # 1. 先转换为灰度图像
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 2. 转换为PIL格式进行后续处理
-    image_rgb = cv2.cvtColor(white_balanced_image, cv2.COLOR_BGR2RGB)
-    pil_image = Image.fromarray(image_rgb)
+    # 2. CLAHE处理
+    if p["use_clahe"]:
+        histogram_image = histogram_equalization(
+            gray_image, p["clip_limit"], p["tile_grid_size"]
+        )
 
-    # 3. 亮度调整
+    # 3. 高斯模糊后转换为PIL格式进行后续处理
+    pil_image = Image.fromarray(
+        cv2.GaussianBlur(histogram_image, (0, 0), 0.3), mode="L"
+    )
+
+    # 4. 亮度调整
     brightness_enhancer = ImageEnhance.Brightness(pil_image)
     brightened = brightness_enhancer.enhance(p["brightness"])
 
-    # 4. 对比度调整
+    # 5. 对比度调整
     contrast_enhancer = ImageEnhance.Contrast(brightened)
     contrasted = contrast_enhancer.enhance(p["contrast"])
-
-    # 5. 转换为灰度
-    grayscale = contrasted.convert("L")
+    # 5. 对比度调整
+    contrast_enhancer = ImageEnhance.Contrast(brightened)
+    contrasted = contrast_enhancer.enhance(p["contrast"])
 
     # 6. Gamma校正
     def gamma_correct(x):
@@ -606,7 +614,7 @@ def process_grayscale_image(image, detail_level="standard"):
         corrected = pow(normalized, p["gamma"])
         return int(corrected * 255)
 
-    gamma_corrected = grayscale.point(gamma_correct)
+    gamma_corrected = contrasted.point(gamma_correct)
 
     # 7. 最终对比度调整
     final_contrast_enhancer = ImageEnhance.Contrast(gamma_corrected)
