@@ -57,6 +57,46 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def expand_image_borders(filepath):
+    """为图片添加20%的白边"""
+    try:
+        # 读取图片
+        image = cv2.imread(filepath)
+        if image is None:
+            return filepath
+
+        height, width = image.shape[:2]
+
+        # 计算边框大小（原图尺寸的20%）
+        border_x = int(width * 0.2)
+        border_y = int(height * 0.2)
+
+        # 添加白边
+        expanded_image = cv2.copyMakeBorder(
+            image,
+            border_y,
+            border_y,
+            border_x,
+            border_x,  # top, bottom, left, right
+            cv2.BORDER_CONSTANT,
+            value=[255, 255, 255],  # 白色边框
+        )
+
+        # 保存扩展后的图片，使用新的文件名
+        base_name, ext = os.path.splitext(filepath)
+        expanded_filepath = f"{base_name}_expanded{ext}"
+        cv2.imwrite(expanded_filepath, expanded_image)
+
+        # 删除原文件
+        os.remove(filepath)
+
+        return expanded_filepath
+
+    except Exception as e:
+        print(f"扩展图片边框时出错: {e}")
+        return filepath
+
+
 @app.route("/")
 def index():
     """主页面 - 图片上传界面"""
@@ -80,12 +120,23 @@ def upload_file():
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(filepath)
 
+        # Check if expand image option is selected
+        expand_image = request.form.get("expandImage") == "on"
+
+        if expand_image:
+            # Apply image expansion with white borders
+            filepath = expand_image_borders(filepath)
+
         # Convert image to base64 for frontend display
         with open(filepath, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
 
         return jsonify(
-            {"success": True, "filename": filename, "image_data": img_base64}
+            {
+                "success": True,
+                "filename": os.path.basename(filepath),
+                "image_data": img_base64,
+            }
         )
 
     return jsonify({"error": "不支持的文件格式"}), 400

@@ -290,6 +290,12 @@ async function handleFileUpload(event) {
     const formData = new FormData();
     formData.append('file', file);
 
+    // 添加扩图选项
+    const expandImageCheckbox = document.getElementById('expand-image');
+    if (expandImageCheckbox && expandImageCheckbox.checked) {
+        formData.append('expandImage', 'on');
+    }
+
     showLoading(true);
 
     try {
