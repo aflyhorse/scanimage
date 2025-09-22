@@ -318,7 +318,7 @@ def download_file(filename):
 
 
 def perspective_correction(image, corners):
-    """透视校正"""
+    """透视校正 - 改进版本，提供更自然的纵横比"""
     # Convert corners to numpy array
     src_points = np.array(corners, dtype=np.float32)
 
@@ -360,11 +360,11 @@ def perspective_correction(image, corners):
     # Calculate the width and height of the corrected image
     width_top = np.linalg.norm(ordered_points[1] - ordered_points[0])
     width_bottom = np.linalg.norm(ordered_points[2] - ordered_points[3])
-    width = max(int(width_top), int(width_bottom))
+    width = int((width_top + width_bottom) / 2)
 
     height_left = np.linalg.norm(ordered_points[3] - ordered_points[0])
     height_right = np.linalg.norm(ordered_points[2] - ordered_points[1])
-    height = max(int(height_left), int(height_right))
+    height = int((height_left + height_right) / 2)
 
     # Define destination points for a rectangle
     dst_points = np.array(
