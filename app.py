@@ -131,12 +131,38 @@ def upload_file():
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(filepath)
 
+        # Check if the image has an alpha channel and save it
+        has_alpha = False
+        alpha_filename = None
+        try:
+            # Use PIL to check for alpha channel
+            pil_image = Image.open(filepath)
+            if pil_image.mode in ("RGBA", "LA") or (
+                pil_image.mode == "P" and "transparency" in pil_image.info
+            ):
+                has_alpha = True
+                # Convert to RGBA if needed
+                if pil_image.mode != "RGBA":
+                    pil_image = pil_image.convert("RGBA")
+
+                # Extract and save alpha channel
+                alpha_channel = pil_image.split()[-1]  # Get the alpha channel
+                alpha_filename = f"alpha_{os.path.basename(filepath)}"
+                alpha_path = os.path.join(app.config["UPLOAD_FOLDER"], alpha_filename)
+                alpha_channel.save(alpha_path)
+        except Exception as e:
+            print(f"Error checking alpha channel: {e}")
+
         # Check if expand image option is selected
         expand_image = request.form.get("expandImage") == "on"
 
         if expand_image:
             # Apply image expansion with white borders
             filepath = expand_image_borders(filepath)
+            # If there's an alpha channel, expand it too
+            if has_alpha and alpha_filename:
+                alpha_path = os.path.join(app.config["UPLOAD_FOLDER"], alpha_filename)
+                expand_image_borders(alpha_path)
 
         # Convert image to base64 for frontend display
         with open(filepath, "rb") as img_file:
@@ -147,6 +173,8 @@ def upload_file():
                 "success": True,
                 "filename": os.path.basename(filepath),
                 "image_data": img_base64,
+                "has_alpha": has_alpha,
+                "alpha_filename": alpha_filename,
             }
         )
 
@@ -161,6 +189,7 @@ def process_image():
     corners = data.get("corners")  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] or None
     color_mode = data.get("color_mode", "color")  # 'color' or 'grayscale'
     processing_option = data.get("processing_option", "adjusted")  # 新增处理选项
+    alpha_filename = data.get("alpha_filename")  # Alpha通道文件名
 
     if not filename:
         return jsonify({"error": "缺少文件名参数"}), 400
@@ -172,12 +201,26 @@ def process_image():
         if image is None:
             return jsonify({"error": "无法读取图像文件"}), 400
 
+        # Load alpha channel if present
+        alpha_channel = None
+        if alpha_filename:
+            alpha_path = os.path.join(app.config["UPLOAD_FOLDER"], alpha_filename)
+            if os.path.exists(alpha_path):
+                alpha_channel = cv2.imread(alpha_path, cv2.IMREAD_GRAYSCALE)
+
         # Perspective correction only if corners are provided
         if corners and len(corners) == 4:
-            corrected_image = perspective_correction(image, corners)
+            if alpha_channel is not None:
+                corrected_image, corrected_alpha = perspective_correction(
+                    image, corners, alpha_channel
+                )
+            else:
+                corrected_image = perspective_correction(image, corners)
+                corrected_alpha = None
         else:
             # No corners provided, use the whole image without perspective correction
             corrected_image = image
+            corrected_alpha = alpha_channel
 
         # Post-processing based on color mode and processing option
         if color_mode == "grayscale":
@@ -188,6 +231,13 @@ def process_image():
         else:  # color mode
             # 使用统一的彩色图像处理函数
             processed_image = process_color_image(corrected_image, processing_option)
+
+        # Merge alpha channel back if present
+        if corrected_alpha is not None:
+            # Convert BGR to BGRA
+            processed_image = cv2.cvtColor(processed_image, cv2.COLOR_BGR2BGRA)
+            # Replace alpha channel
+            processed_image[:, :, 3] = corrected_alpha
 
         # Save processed image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -221,6 +271,7 @@ def reprocess_image():
     corners = data.get("corners")
     color_mode = data.get("color_mode", "color")
     processing_option = data.get("processing_option", "adjusted")
+    alpha_filename = data.get("alpha_filename")  # Alpha通道文件名
 
     if not filename:
         return jsonify({"error": "缺少文件名参数"}), 400
@@ -232,12 +283,26 @@ def reprocess_image():
         if image is None:
             return jsonify({"error": "无法读取图像文件"}), 400
 
+        # Load alpha channel if present
+        alpha_channel = None
+        if alpha_filename:
+            alpha_path = os.path.join(app.config["UPLOAD_FOLDER"], alpha_filename)
+            if os.path.exists(alpha_path):
+                alpha_channel = cv2.imread(alpha_path, cv2.IMREAD_GRAYSCALE)
+
         # Perspective correction only if corners are provided
         if corners and len(corners) == 4:
-            corrected_image = perspective_correction(image, corners)
+            if alpha_channel is not None:
+                corrected_image, corrected_alpha = perspective_correction(
+                    image, corners, alpha_channel
+                )
+            else:
+                corrected_image = perspective_correction(image, corners)
+                corrected_alpha = None
         else:
             # No corners provided, use the whole image without perspective correction
             corrected_image = image
+            corrected_alpha = alpha_channel
 
         # Post-processing based on color mode and processing option
         if color_mode == "grayscale":
@@ -248,6 +313,13 @@ def reprocess_image():
         else:  # color mode
             # 使用统一的彩色图像处理函数
             processed_image = process_color_image(corrected_image, processing_option)
+
+        # Merge alpha channel back if present
+        if corrected_alpha is not None:
+            # Convert BGR to BGRA
+            processed_image = cv2.cvtColor(processed_image, cv2.COLOR_BGR2BGRA)
+            # Replace alpha channel
+            processed_image[:, :, 3] = corrected_alpha
 
         # Save processed image (overwrite the current processed image)
         if data.get("processed_filename"):
@@ -328,8 +400,19 @@ def download_file(filename):
         return jsonify({"error": f"下载失败: {str(e)}"}), 500
 
 
-def perspective_correction(image, corners):
-    """透视校正 - 改进版本，提供更自然的纵横比"""
+def perspective_correction(image, corners, alpha_channel=None):
+    """
+    透视校正 - 改进版本，提供更自然的纵横比
+
+    Args:
+        image: 输入图像 (BGR格式)
+        corners: 四个角点坐标
+        alpha_channel: 可选的Alpha通道图像（灰度图）
+
+    Returns:
+        corrected: 校正后的图像
+        corrected_alpha: 校正后的Alpha通道（如果提供了alpha_channel）
+    """
     # Convert corners to numpy array
     src_points = np.array(corners, dtype=np.float32)
 
@@ -385,9 +468,16 @@ def perspective_correction(image, corners):
     # Calculate perspective transformation matrix
     matrix = cv2.getPerspectiveTransform(ordered_points, dst_points)
 
-    # Apply perspective transformation
+    # Apply perspective transformation to the main image
     corrected = cv2.warpPerspective(image, matrix, (width, height))
 
+    # Apply the same transformation to alpha channel if provided
+    corrected_alpha = None
+    if alpha_channel is not None:
+        corrected_alpha = cv2.warpPerspective(alpha_channel, matrix, (width, height))
+
+    if alpha_channel is not None:
+        return corrected, corrected_alpha
     return corrected
 
 

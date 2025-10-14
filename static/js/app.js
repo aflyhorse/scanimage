@@ -315,11 +315,13 @@ async function handleFileUpload(event) {
         if (result.success) {
             uploadedFilename = result.filename;
 
-            // 保存当前状态
+            // 保存当前状态，包括Alpha通道信息
             const colorModeElement = document.querySelector('input[name="colorMode"]:checked');
             savedState.uploadedImage = result.image_data;
             savedState.selectedColorMode = colorModeElement ? colorModeElement.value : 'color';
             savedState.filename = result.filename;
+            savedState.hasAlpha = result.has_alpha || false;
+            savedState.alphaFilename = result.alpha_filename || null;
             savedState.cropCorners = []; // 重置裁剪区域
             savedState.actualCorners = []; // 重置实际坐标
 
@@ -842,7 +844,8 @@ async function processImage() {
                     filename: uploadedFilename,
                     corners: null, // 发送null表示处理全图
                     color_mode: colorMode,
-                    processing_option: 'adjusted'
+                    processing_option: 'adjusted',
+                    alpha_filename: savedState.alphaFilename // 传递Alpha通道文件名
                 })
             });
 
@@ -893,7 +896,8 @@ async function processImage() {
                     filename: uploadedFilename,
                     corners: actualCorners,
                     color_mode: colorMode,
-                    processing_option: 'adjusted'
+                    processing_option: 'adjusted',
+                    alpha_filename: savedState.alphaFilename // 传递Alpha通道文件名
                 })
             });
 
@@ -1010,7 +1014,8 @@ async function reprocessImage() {
                     corners: actualCorners,
                     color_mode: currentColorMode,
                     processing_option: processingOption,
-                    processed_filename: processedFilename
+                    processed_filename: processedFilename,
+                    alpha_filename: savedState.alphaFilename // 传递Alpha通道文件名
                 })
             });
 
@@ -1267,7 +1272,8 @@ async function switchColorMode(targetMode) {
                 corners: savedState.actualCorners,
                 color_mode: targetMode,
                 processing_option: getCurrentProcessingOption(targetMode),
-                processed_filename: processedFilename
+                processed_filename: processedFilename,
+                alpha_filename: savedState.alphaFilename // 传递Alpha通道文件名
             })
         });
 
