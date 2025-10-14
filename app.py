@@ -9,6 +9,7 @@ from PIL import Image, ImageEnhance
 import base64
 from dotenv import load_dotenv
 import click
+import uuid
 
 load_dotenv()
 app = Flask(__name__)
@@ -128,7 +129,9 @@ def upload_file():
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{filename}"
+        # 添加UUID后缀避免并发冲突
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"{timestamp}_{unique_id}_{filename}"
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(filepath)
 
@@ -242,7 +245,9 @@ def process_image():
 
         # Save processed image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        processed_filename = f"{timestamp}.png"
+        # 添加UUID后缀避免并发冲突
+        unique_id = str(uuid.uuid4())[:8]
+        processed_filename = f"{timestamp}_{unique_id}.png"
         processed_path = os.path.join(
             app.config["PROCESSED_FOLDER"], processed_filename
         )
@@ -327,7 +332,9 @@ def reprocess_image():
             processed_filename = data.get("processed_filename")
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            processed_filename = f"{timestamp}.png"
+            # 添加UUID后缀避免并发冲突
+            unique_id = str(uuid.uuid4())[:8]
+            processed_filename = f"{timestamp}_{unique_id}.png"
 
         processed_path = os.path.join(
             app.config["PROCESSED_FOLDER"], processed_filename
