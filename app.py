@@ -1,13 +1,14 @@
 import os
 import cv2
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, send_file, url_for
 from flask_bootstrap import Bootstrap5
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageEnhance
 import base64
 from dotenv import load_dotenv
+import click
 
 load_dotenv()
 app = Flask(__name__)
@@ -847,6 +848,102 @@ def process_grayscale_image(image, detail_level="standard"):
     result = cv2.cvtColor(final_array, cv2.COLOR_GRAY2BGR)
 
     return result
+
+
+# ===== CLI Commands =====
+
+
+@app.cli.command("cleanup")
+@click.argument("days", type=int)
+@click.option("--quiet", "-q", is_flag=True, help="仅输出最终统计信息")
+def cleanup_old_files(days, quiet):
+    """
+    清理超过指定天数的临时文件
+
+    删除 uploads/ 和 processed/ 目录中早于 (今天 - days) 的所有文件。
+
+    用法: flask cleanup <天数> [--quiet/-q]
+    示例: flask cleanup 7     # 删除7天前的文件（详细模式）
+          flask cleanup 7 -q  # 删除7天前的文件（静默模式）
+    """
+    if days < 0:
+        click.echo("错误: 天数必须是非负整数")
+        return
+
+    # 计算截止日期（只比较日期，不比较具体时间）
+    cutoff_date = (datetime.now() - timedelta(days=days)).date()
+
+    if not quiet:
+        click.echo(f"清理早于 {cutoff_date} 的文件...")
+
+    # 要清理的目录
+    folders = [app.config["UPLOAD_FOLDER"], app.config["PROCESSED_FOLDER"]]
+
+    total_deleted = 0
+    total_size = 0
+
+    for folder in folders:
+        if not os.path.exists(folder):
+            if not quiet:
+                click.echo(f"跳过不存在的目录: {folder}")
+            continue
+
+        if not quiet:
+            click.echo(f"\n扫描目录: {folder}")
+        folder_deleted = 0
+        folder_size = 0
+
+        try:
+            for filename in os.listdir(folder):
+                filepath = os.path.join(folder, filename)
+
+                # 跳过目录，只处理文件
+                if not os.path.isfile(filepath):
+                    continue
+
+                # 跳过 .gitkeep 文件
+                if filename == ".gitkeep":
+                    continue
+
+                try:
+                    # 获取文件的修改时间
+                    file_mtime = datetime.fromtimestamp(
+                        os.path.getmtime(filepath)
+                    ).date()
+
+                    # 如果文件早于截止日期，则删除
+                    if file_mtime < cutoff_date:
+                        file_size = os.path.getsize(filepath)
+                        os.remove(filepath)
+                        folder_deleted += 1
+                        folder_size += file_size
+                        if not quiet:
+                            click.echo(
+                                f"  已删除: {filename} (修改日期: {file_mtime}, 大小: {file_size / 1024:.2f} KB)"
+                            )
+
+                except OSError as e:
+                    if not quiet:
+                        click.echo(f"  警告: 无法删除 {filename}: {e}", err=True)
+
+        except OSError as e:
+            if not quiet:
+                click.echo(f"错误: 无法访问目录 {folder}: {e}", err=True)
+            continue
+
+        if not quiet:
+            click.echo(
+                f"目录 {folder} 统计: 删除 {folder_deleted} 个文件，释放 {folder_size / 1024 / 1024:.2f} MB"
+            )
+        total_deleted += folder_deleted
+        total_size += folder_size
+
+    # 最终统计信息始终输出（无论是否静默模式）
+    if not quiet:
+        click.echo("\n清理完成！")
+    click.echo(
+        f"总计删除: {total_deleted} 个文件，释放: {total_size / 1024 / 1024:.2f} MB"
+    )
 
 
 if __name__ == "__main__":
