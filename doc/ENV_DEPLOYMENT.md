@@ -27,7 +27,8 @@ PORT=5000                           # 端口号
 WORKERS=4                           # Gunicorn worker 进程数
 
 # 文件配置
-MAX_CONTENT_LENGTH=20971520         # 最大文件大小（字节）
+# 最大上传文件大小：20MB = 20 * 1024 * 1024 / 0.95 = 22075285 字节
+MAX_CONTENT_LENGTH=22075285
 UPLOAD_FOLDER=uploads               # 上传文件夹
 PROCESSED_FOLDER=processed          # 处理后文件夹
 

@@ -287,6 +287,12 @@ async function handleFileUpload(event) {
         return;
     }
 
+    // 检查文件大小
+    if (window.MAX_UPLOAD_SIZE_BYTES && file.size > window.MAX_UPLOAD_SIZE_BYTES) {
+        showError(`文件大小超过限制！最大允许上传 ${window.MAX_UPLOAD_SIZE_MB} MB，当前文件大小为 ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+        return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 

@@ -35,7 +35,7 @@
                         <form id="upload-form" enctype="multipart/form-data">
                             <div class="mb-3">
                                 <input type="file" class="form-control" id="image-input" accept="image/*" required>
-                                <div class="form-text">支持 PNG, JPG, JPEG, GIF, BMP 格式</div>
+                                <div class="form-text">支持 PNG, JPG, JPEG, GIF, BMP 格式，最大上传大小 {{ max_upload_size_mb }} MB</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">输出模式:</label>
@@ -239,6 +239,10 @@
         // set base API path for subdirectory deployment
         window.API_BASE = '{{ request.script_root or "" }}';
         console.log('API Base Path:', window.API_BASE);
+        
+        // set upload configuration
+        window.MAX_UPLOAD_SIZE_BYTES = {{ max_upload_size_bytes }};
+        window.MAX_UPLOAD_SIZE_MB = {{ max_upload_size_mb }};
     </script>
     <script src="{{ static_url('js/app.js') }}"></script>
 </body>

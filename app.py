@@ -53,6 +53,17 @@ def inject_footer_config():
     )
 
 
+@app.context_processor
+def inject_upload_config():
+    """提供上传配置信息"""
+    max_size_bytes = app.config["MAX_CONTENT_LENGTH"]
+    # 降低5%余量并转换为MB
+    max_size_mb = round((max_size_bytes * 0.95) / (1024 * 1024), 1)
+    return dict(
+        max_upload_size_mb=max_size_mb, max_upload_size_bytes=int(max_size_bytes * 0.95)
+    )
+
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
