@@ -1,123 +1,123 @@
-# Magnifier Feature Documentation
+# 放大镜功能文档
 
-## Overview
+## 概述
 
-A floating magnifier (loupe) feature has been added to help users precisely select corner points during image cropping. The magnifier displays a 3x zoomed view of the area around the cursor without blocking the current selection point.
+新增了一个悬浮放大镜（loupe）功能，帮助用户在进行图片裁剪与透视矫正时精确选取角点。放大镜会在光标周围显示 3 倍放大视图，同时不会遮挡当前选中的位置。
 
-## Features
+## 功能点
 
-### 1. Smart Positioning
+### 1. 智能定位
 
-- The magnifier automatically positions itself to avoid covering the current cursor/touch position
-- Default position: top-right relative to the cursor
-- Falls back to other positions if there's insufficient space:
-  - If no space on right → positions on left
-  - If no space on top → positions on bottom
-- Maintains a 30px offset from the cursor for comfortable viewing
+- 放大镜会自动定位，尽量避免覆盖当前光标或触摸点
+- 默认位置：相对于光标的右上方
+- 当空间不足时会回退到其它位置：
+  - 右侧空间不足 → 放到左侧
+  - 上方空间不足 → 放到下方
+- 与光标保持 30px 的偏移，保证查看舒适
 
-### 2. Visual Design
+### 2. 视觉设计
 
-- **Size**: 150px diameter circular display
-- **Zoom level**: 3x magnification
-- **Border**: 3px blue border (#007bff) matching the app's primary color
-- **Shadow**: Soft shadow for depth perception
-- **Crosshair**: Red crosshair at the center to indicate the exact selection point
-- **Non-interactive**: `pointer-events: none` ensures it doesn't interfere with clicking
+- 大小：直径 150px 的圆形显示
+- 放大倍率：3x
+- 边框：3px 蓝色边框（#007bff），与应用主题色一致
+- 阴影：柔和阴影以增强层次感
+- 准星：中心有红色十字准星以指示精确位置
+- 非交互：使用 `pointer-events: none`，不影响点击/拖拽操作
 
-### 3. Behavior
+### 3. 行为
 
-#### Mouse Support
+#### 鼠标支持
 
-- Automatically appears when hovering over the canvas during point selection
-- Updates in real-time when dragging corner points
-- Hides when:
-  - Mouse leaves the canvas
-  - Dragging ends (mouse up)
-  - Not in selection mode
+- 在选择角点时，将鼠标悬停到画布上会自动显示放大镜
+- 拖动角点时放大镜会实时更新
+- 以下情况隐藏放大镜：
+  - 鼠标离开画布
+  - 拖拽结束（mouse up）
+  - 当前不在选择模式
 
-#### Touch Support
+#### 触摸支持
 
-- Appears during touch-and-drag operations
-- Updates smoothly during touch movement
-- Hides when touch ends
+- 在触摸并拖动时显示放大镜
+- 触摸移动时平滑更新
+- 触摸结束时隐藏放大镜
 
-#### Pointer Events
+#### Pointer 事件
 
-- Full support for modern pointer events API
-- Unified handling for mouse, touch, and stylus input
+- 完整支持现代浏览器的 pointer events API
+- 统一处理鼠标、触摸与触控笔输入
 
-### 4. Performance Optimization
+### 4. 性能优化
 
-- Uses `requestAnimationFrame` for smooth updates
-- Image smoothing disabled for crisp pixel display
-- Only active during the selection phase
-- Minimal impact on drag performance
+- 使用 `requestAnimationFrame` 做平滑刷新
+- 关闭图像平滑（imageSmoothingEnabled = false）以获得清晰像素显示
+- 仅在选择阶段激活放大镜，减少性能影响
+- 对拖拽性能影响极小
 
-## Implementation Details
+## 实现细节
 
-### CSS Classes
+### CSS 类
 
-- `.magnifier`: Main container with circular mask
-- `.magnifier canvas`: Internal canvas for rendering zoomed image
-- `.magnifier::before` and `::after`: Crosshair markers
+- `.magnifier`：放大镜主容器，带圆形遮罩
+- `.magnifier canvas`：放大镜内部用于渲染放大图像的 canvas
+- `.magnifier::before` / `::after`：用于绘制中心十字准星
 
-### JavaScript Variables
+### JavaScript 变量
 
-- `magnifier`: DOM element for the magnifier container
-- `magnifierCanvas`: Internal canvas element
-- `magnifierCtx`: 2D rendering context
-- `magnifierZoom`: Zoom factor (default: 3)
-- `magnifierSize`: Display size in pixels (default: 150)
-- `magnifierOffset`: Distance from cursor (default: 30)
+- `magnifier`：放大镜容器 DOM 元素
+- `magnifierCanvas`：放大镜内部 canvas 元素
+- `magnifierCtx`：2D 绘图上下文
+- `magnifierZoom`：放大倍率（默认 3）
+- `magnifierSize`：放大镜显示尺寸（默认 150）
+- `magnifierOffset`：放大镜与光标间距（默认 30）
 
-### Key Functions
+### 关键函数
 
-- `initializeMagnifier()`: Creates and initializes the magnifier DOM structure
-- `updateMagnifier(event)`: Updates magnifier position and content based on cursor position
-- `positionMagnifier(event, rect)`: Smart positioning algorithm to avoid covering the cursor
-- `hideMagnifier()`: Hides the magnifier
+- `initializeMagnifier()`：创建并初始化放大镜 DOM
+- `updateMagnifier(event)`：根据光标位置更新放大镜的内容与位置
+- `positionMagnifier(event, rect)`：智能定位算法，避免遮挡光标
+- `hideMagnifier()`：隐藏放大镜
 
-### Event Integration
+### 事件集成
 
-- Integrated into existing `handleMouseMove()` during dragging
-- Added new `handleCanvasHover()` for hover-only magnification
-- Touch and pointer events automatically supported through unified event handling
+- 在拖拽时集成到现有 `handleMouseMove()` 中
+- 新增 `handleCanvasHover()` 用于仅悬停时的放大镜显示
+- 触摸与 pointer 事件通过统一处理自动支持
 
-## User Experience
+## 用户体验
 
-### When Active
+### 激活时
 
-- Hover over the canvas → magnifier appears
-- Click and drag a corner point → magnifier follows cursor
-- Release → magnifier disappears
+- 将鼠标移动到画布上 → 放大镜出现
+- 点击并拖动角点 → 放大镜跟随光标移动
+- 松开鼠标或触摸 → 放大镜消失
 
-### Visual Feedback
+### 视觉反馈
 
-- Clear 3x zoom shows pixel-level detail
-- Red crosshair indicates exact selection point
-- Blue border matches app's color scheme
-- Always positioned for optimal visibility
+- 清晰的 3 倍放大，能看清像素级细节
+- 红色十字准星指示精确选中点
+- 蓝色边框与应用色系一致
+- 智能定位保证最佳可见性
 
-## Browser Compatibility
+## 浏览器兼容性
 
-- Works in all modern browsers supporting:
+- 兼容所有现代浏览器，需支持：
   - Canvas API
   - CSS transforms
-  - Pointer events (with mouse/touch fallbacks)
+  - Pointer events（存在回退的鼠标/触摸处理）
 
-## Future Enhancements (Potential)
+## 未来可能的增强
 
-- Adjustable zoom level (user preference)
-- Toggle on/off option
-- Different magnifier shapes (square, rectangle)
-- Zoom level indicator
-- Keyboard shortcut to toggle
+- 可调节的放大倍率（用户偏好）
+- 开关以启/禁放大镜
+- 不同形状的放大镜（方形、矩形）
+- 显示当前放大倍率的指示器
+- 提供键盘快捷切换
 
-## Testing Recommendations
+## 测试建议
 
-1. Test on desktop with mouse input
-2. Test on mobile/tablet with touch input
-3. Test with stylus/pen input
-4. Verify positioning in all canvas corners
-5. Check performance with large images
-6. Test during both point addition and dragging
+1. 在桌面用鼠标测试
+2. 在手机/平板上用触摸测试
+3. 用触控笔/手写笔测试
+4. 在画布各个角落验证定位
+5. 用大图测试性能
+6. 在添加角点与拖拽时测试交互

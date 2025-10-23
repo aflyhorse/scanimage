@@ -22,6 +22,11 @@ let savedState = {
     filename: ''               // 保存文件名
 };
 
+// 纵横比调整相关变量
+let originalProcessedImageData = null; // 保存未调整纵横比的原始处理结果
+let currentAspectRatio = 0; // 当前纵横比调整值 (-30 到 30)
+let aspectRatioAdjustTimeout = null; // 防抖定时器
+
 // 检测微信环境
 function isWechat() {
     return /MicroMessenger/i.test(navigator.userAgent);
@@ -393,6 +398,12 @@ function setupEventListeners() {
     // 色彩模式切换按钮
     document.getElementById('switch-to-color').addEventListener('click', () => switchColorMode('color'));
     document.getElementById('switch-to-grayscale').addEventListener('click', () => switchColorMode('grayscale'));
+
+    // 纵横比调整滑条
+    const aspectRatioSlider = document.getElementById('aspect-ratio-slider');
+    if (aspectRatioSlider) {
+        aspectRatioSlider.addEventListener('input', handleAspectRatioChange);
+    }
 }
 
 async function handleFileUpload(event) {
@@ -1199,6 +1210,12 @@ function displayProcessedImage(imageData) {
     const resultImg = document.getElementById('result-image');
     resultImg.src = 'data:image/png;base64,' + imageData;
 
+    // 保存原始处理结果，用于纵横比调整
+    originalProcessedImageData = imageData;
+
+    // 重置纵横比滑条
+    resetAspectRatioSlider();
+
     // 在微信环境下更新下载按钮
     if (isWechat()) {
         const downloadBtn = document.getElementById('download-btn');
@@ -1206,6 +1223,101 @@ function displayProcessedImage(imageData) {
         downloadBtn.className = 'btn btn-info';
         downloadBtn.style.cursor = 'default';
     }
+}
+
+// 重置纵横比滑条
+function resetAspectRatioSlider() {
+    const slider = document.getElementById('aspect-ratio-slider');
+    const valueDisplay = document.getElementById('aspect-ratio-value');
+    if (slider && valueDisplay) {
+        slider.value = 0;
+        currentAspectRatio = 0;
+        valueDisplay.textContent = '0%';
+        valueDisplay.className = 'badge bg-secondary';
+    }
+}
+
+// 处理纵横比调整
+function handleAspectRatioChange(event) {
+    const value = parseInt(event.target.value);
+    currentAspectRatio = value;
+
+    // 更新显示值
+    const valueDisplay = document.getElementById('aspect-ratio-value');
+    if (valueDisplay) {
+        if (value > 0) {
+            valueDisplay.textContent = `横向+${value}%`;
+            valueDisplay.className = 'badge bg-info';
+        } else if (value < 0) {
+            valueDisplay.textContent = `纵向+${Math.abs(value)}%`;
+            valueDisplay.className = 'badge bg-warning';
+        } else {
+            valueDisplay.textContent = '0%';
+            valueDisplay.className = 'badge bg-secondary';
+        }
+    }
+
+    // 使用防抖，避免频繁调整
+    if (aspectRatioAdjustTimeout) {
+        clearTimeout(aspectRatioAdjustTimeout);
+    }
+
+    aspectRatioAdjustTimeout = setTimeout(() => {
+        applyAspectRatioAdjustment(value);
+    }, 150); // 150ms 防抖延迟
+}
+
+// 应用纵横比调整
+function applyAspectRatioAdjustment(percentage) {
+    if (!originalProcessedImageData) {
+        return;
+    }
+
+    // 如果是 0，直接显示原图
+    if (percentage === 0) {
+        const resultImg = document.getElementById('result-image');
+        resultImg.src = 'data:image/png;base64,' + originalProcessedImageData;
+        return;
+    }
+
+    // 创建临时 canvas 进行纵横比调整
+    const img = new Image();
+    img.onload = function () {
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+
+        const originalWidth = img.width;
+        const originalHeight = img.height;
+
+        let newWidth = originalWidth;
+        let newHeight = originalHeight;
+
+        // 计算新尺寸
+        if (percentage > 0) {
+            // 正值：横向拉伸
+            newWidth = originalWidth * (1 + percentage / 100);
+        } else {
+            // 负值：纵向拉伸
+            newHeight = originalHeight * (1 + Math.abs(percentage) / 100);
+        }
+
+        tempCanvas.width = newWidth;
+        tempCanvas.height = newHeight;
+
+        // 绘制调整后的图像
+        tempCtx.drawImage(img, 0, 0, newWidth, newHeight);
+
+        // 转换为 base64 并显示
+        const adjustedImageData = tempCanvas.toDataURL('image/png').split(',')[1];
+        const resultImg = document.getElementById('result-image');
+        resultImg.src = 'data:image/png;base64,' + adjustedImageData;
+
+        if (debugMode) {
+            console.log(`纵横比调整: ${percentage}%, 原始尺寸: ${originalWidth}x${originalHeight}, 新尺寸: ${newWidth}x${newHeight}`);
+        }
+    };
+
+    img.src = 'data:image/png;base64,' + originalProcessedImageData;
 }
 
 async function rotateImage(angle) {
@@ -1248,12 +1360,24 @@ function downloadImage() {
         return;
     }
 
-    const link = document.createElement('a');
-    link.href = getApiUrl('/download/' + processedFilename);
-    link.download = processedFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // 如果有纵横比调整，下载调整后的图片
+    if (currentAspectRatio !== 0) {
+        const resultImg = document.getElementById('result-image');
+        const link = document.createElement('a');
+        link.href = resultImg.src; // 使用当前显示的图片（已调整纵横比）
+        link.download = processedFilename.replace('.png', `_adjusted_${currentAspectRatio}.png`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } else {
+    // 没有调整，从服务器下载原始处理结果
+        const link = document.createElement('a');
+        link.href = getApiUrl('/download/' + processedFilename);
+        link.download = processedFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 }
 
 function startOver() {
@@ -1266,6 +1390,14 @@ function startOver() {
     currentColorMode = 'color';
     currentProcessingOption = 'adjusted';
 
+    // 重置纵横比相关变量
+    originalProcessedImageData = null;
+    currentAspectRatio = 0;
+    if (aspectRatioAdjustTimeout) {
+        clearTimeout(aspectRatioAdjustTimeout);
+        aspectRatioAdjustTimeout = null;
+    }
+
     // 清除原始图片数据
     if (window.originalImageBase64) {
         delete window.originalImageBase64;
@@ -1275,6 +1407,12 @@ function startOver() {
     document.getElementById('selection-section').classList.add('d-none');
     document.getElementById('result-section').classList.add('d-none');
     document.getElementById('upload-section').classList.remove('d-none');
+
+    // 显示页面标题
+    const titleRow = document.getElementById('page-title-row');
+    if (titleRow) {
+        titleRow.classList.remove('d-none');
+    }
 
     // 重置表单但保持输出模式选择
     const form = document.getElementById('upload-form');
@@ -1305,6 +1443,16 @@ function showSection(sectionId) {
 
     // 显示指定section
     document.getElementById(sectionId).classList.remove('d-none');
+
+    // 在结果页面隐藏标题以节省空间，其他页面显示标题
+    const titleRow = document.getElementById('page-title-row');
+    if (titleRow) {
+        if (sectionId === 'result-section') {
+            titleRow.classList.add('d-none');
+        } else {
+            titleRow.classList.remove('d-none');
+        }
+    }
 }
 
 function showLoading(show) {
@@ -1375,6 +1523,14 @@ function backToStep2() {
     if (!savedState.uploadedImage) {
         showError('没有保存的图片数据，请重新上传');
         return;
+    }
+
+    // 重置纵横比相关变量
+    originalProcessedImageData = null;
+    currentAspectRatio = 0;
+    if (aspectRatioAdjustTimeout) {
+        clearTimeout(aspectRatioAdjustTimeout);
+        aspectRatioAdjustTimeout = null;
     }
 
     // 恢复图片显示
