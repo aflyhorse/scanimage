@@ -5,6 +5,7 @@ bootstrap-flask
 # Image processing
 opencv-python-headless
 Pillow
+pillow-heif
 numpy
 
 # File handling and utilities

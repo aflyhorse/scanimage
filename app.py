@@ -10,6 +10,10 @@ import base64
 from dotenv import load_dotenv
 import click
 import uuid
+from pillow_heif import register_heif_opener
+
+# Register HEIF opener to enable HEIC/HEIF support in PIL
+register_heif_opener()
 
 load_dotenv()
 app = Flask(__name__)
@@ -31,7 +35,7 @@ bootstrap = Bootstrap5(app)
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["PROCESSED_FOLDER"], exist_ok=True)
 
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp"}
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "heic", "heif"}
 
 
 @app.context_processor
