@@ -31,6 +31,14 @@ function isWechat() {
 let animationFrameId = null;
 let smoothDragMode = true; // 流畅拖拽模式
 
+// 放大镜相关变量
+let magnifier = null;
+let magnifierCanvas = null;
+let magnifierCtx = null;
+let magnifierZoom = 3; // 放大倍数
+let magnifierSize = 150; // 放大镜尺寸（像素）
+let magnifierOffset = 30; // 放大镜与光标的距离
+
 // API路径辅助函数
 function getApiUrl(path) {
     const base = window.API_BASE || '';
@@ -143,6 +151,9 @@ function initializeElements() {
     canvas.parentNode.insertBefore(canvasContainer, canvas);
     canvasContainer.appendChild(canvas);
 
+    // 初始化放大镜
+    initializeMagnifier();
+
     // 添加调试信息显示
     if (debugMode) {
         createDebugInfoDisplay();
@@ -190,6 +201,115 @@ function createDebugInfoDisplay() {
     });
 }
 
+// 初始化放大镜
+function initializeMagnifier() {
+    // 创建放大镜容器
+    magnifier = document.createElement('div');
+    magnifier.className = 'magnifier';
+    magnifier.style.width = magnifierSize + 'px';
+    magnifier.style.height = magnifierSize + 'px';
+
+    // 创建放大镜内部canvas
+    magnifierCanvas = document.createElement('canvas');
+    magnifierCanvas.width = magnifierSize;
+    magnifierCanvas.height = magnifierSize;
+    magnifierCtx = magnifierCanvas.getContext('2d');
+
+    magnifier.appendChild(magnifierCanvas);
+    canvasContainer.appendChild(magnifier);
+}
+
+// 更新放大镜位置和内容
+function updateMagnifier(event) {
+    if (!magnifier || !canvas || !ctx || !originalImageData) {
+        return;
+    }
+
+    const [canvasX, canvasY] = getCanvasCoordinates(event);
+    const rect = canvas.getBoundingClientRect();
+
+    // 计算放大镜应该显示的源区域（以光标为中心）
+    const sourceSize = magnifierSize / magnifierZoom;
+    const halfSourceSize = sourceSize / 2;
+    const sourceX = canvasX - halfSourceSize;
+    const sourceY = canvasY - halfSourceSize;
+
+    // 清空放大镜canvas
+    magnifierCtx.clearRect(0, 0, magnifierSize, magnifierSize);
+
+    // 绘制放大的图像区域
+    magnifierCtx.imageSmoothingEnabled = false; // 关闭平滑以获得更清晰的像素
+
+    try {
+        // 将源区域绘制到放大镜canvas的中心
+        // 源区域的中心点（光标位置）应该对应放大镜canvas的中心点
+        magnifierCtx.drawImage(
+            canvas,
+            sourceX, sourceY, sourceSize, sourceSize,  // 源区域
+            0, 0, magnifierSize, magnifierSize         // 目标区域，填满整个放大镜
+        );
+    } catch (e) {
+        // 如果绘制失败（例如超出边界），忽略错误
+        if (debugMode) {
+            console.log('放大镜绘制错误:', e);
+        }
+    }
+
+    // 智能定位放大镜，避免遮挡当前位置
+    positionMagnifier(event, rect);
+
+    // 显示放大镜
+    magnifier.style.display = 'block';
+}
+
+// 智能定位放大镜
+function positionMagnifier(event, rect) {
+    // 获取事件的客户端坐标
+    let clientX, clientY;
+    if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+    } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+    }
+
+    // 计算相对于canvas容器的坐标
+    const containerRect = canvasContainer.getBoundingClientRect();
+    let relativeX = clientX - containerRect.left;
+    let relativeY = clientY - containerRect.top;
+
+    // 默认位置：右上方
+    let magnifierX = relativeX + magnifierOffset;
+    let magnifierY = relativeY - magnifierSize - magnifierOffset;
+
+    // 检查右侧是否有足够空间
+    if (magnifierX + magnifierSize > containerRect.width) {
+        // 放到左侧
+        magnifierX = relativeX - magnifierSize - magnifierOffset;
+    }
+
+    // 检查上方是否有足够空间
+    if (magnifierY < 0) {
+        // 放到下方
+        magnifierY = relativeY + magnifierOffset;
+    }
+
+    // 确保不超出容器边界
+    magnifierX = Math.max(0, Math.min(magnifierX, containerRect.width - magnifierSize));
+    magnifierY = Math.max(0, Math.min(magnifierY, containerRect.height - magnifierSize));
+
+    magnifier.style.left = magnifierX + 'px';
+    magnifier.style.top = magnifierY + 'px';
+}
+
+// 隐藏放大镜
+function hideMagnifier() {
+    if (magnifier) {
+        magnifier.style.display = 'none';
+    }
+}
+
 function setupEventListeners() {
     console.log('Setting up event listeners...');
 
@@ -205,6 +325,9 @@ function setupEventListeners() {
     // Canvas事件
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
     canvas.addEventListener('pointerdown', handleCanvasPointerDown); // 添加pointer支持
+
+    // Canvas悬停事件 - 显示放大镜
+    canvas.addEventListener('mousemove', handleCanvasHover);
 
     // 触摸事件（手机端支持）
     canvas.addEventListener('touchstart', handleCanvasTouchStart);
@@ -456,6 +579,28 @@ function updateCornerPoints() {
     });
 }
 
+// 处理canvas悬停 - 显示放大镜（仅在选择区域阶段）
+function handleCanvasHover(event) {
+    // 只在选择区域阶段显示放大镜
+    const selectionSection = document.getElementById('selection-section');
+    if (!selectionSection || selectionSection.classList.contains('d-none')) {
+        return;
+    }
+
+    // 如果没有加载图片，不显示放大镜
+    if (!originalImageData) {
+        return;
+    }
+
+    // 在拖拽时，放大镜已由handleMouseMove处理
+    if (isDragging) {
+        return;
+    }
+
+    // 显示放大镜
+    updateMagnifier(event);
+}
+
 function handleCanvasMouseDown(event) {
     event.preventDefault();
     const [x, y] = getCanvasCoordinates(event);
@@ -515,11 +660,15 @@ function handleCanvasMouseDown(event) {
 
 function handleMouseMove(event) {
     if (isDragging && dragIndex >= 0) {
+        // 更新放大镜
+        updateMagnifier(event);
+
         // 确保拖拽的corner point仍然存在
         if (dragIndex >= corners.length) {
             console.warn('拖拽索引超出范围，停止拖拽');
             isDragging = false;
             dragIndex = -1;
+            hideMagnifier();
             return;
         }
 
@@ -562,6 +711,9 @@ function handleMouseMove(event) {
 
 function handleMouseUp(event) {
     if (isDragging) {
+        // 隐藏放大镜
+        hideMagnifier();
+
         isDragging = false;
         const draggingPoint = canvasContainer.querySelector('.dragging');
         if (draggingPoint) {
@@ -608,6 +760,9 @@ function handleMouseUp(event) {
 }
 
 function handleMouseLeave() {
+    // 隐藏放大镜
+    hideMagnifier();
+
     // 鼠标离开canvas时停止拖拽
     if (isDragging) {
         isDragging = false;
@@ -653,6 +808,9 @@ function handleTouchMove(event) {
 function handleTouchEnd(event) {
     if (isDragging) {
         event.preventDefault();
+
+        // 隐藏放大镜
+        hideMagnifier();
 
         const mouseEvent = {
             preventDefault: () => { }
